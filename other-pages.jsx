@@ -365,7 +365,7 @@ const PeoplePage = ({ navigate, route, toast }) => {
     );
   }
 
-  const groups = ['Principal Investigator', 'Co-Investigator', 'Co-Supervisor', 'MFM Fellow', 'Resident', 'Medical Student', 'Research Coordinator', 'Biostatistician', 'Neonatology', 'Volunteer'];
+  const groups = ['Principal Investigator', 'Co-Investigator', 'Co-Supervisor', 'MFM Fellow', 'Resident', 'Medical Student', 'Research Coordinator', 'Biostatistician', 'Neonatology', 'Volunteer', 'Collaborator', 'Industry Partner', 'Other'];
 
   return (
     <div className="page">
@@ -393,7 +393,9 @@ const PeoplePage = ({ navigate, route, toast }) => {
         </div>
       </div>
       {groups.map(g => {
-        const items = filtered.filter(p => p.role === g);
+        const items = g === 'Other'
+          ? filtered.filter(p => !groups.includes(p.role))
+          : filtered.filter(p => p.role === g);
         if (!items.length) return null;
         return (
           <div key={g} style={{ marginBottom: 28 }}>
