@@ -245,6 +245,7 @@ const PeoplePage = ({ navigate, route, toast }) => {
     const lastUpd = UPDATES.filter(u => u.user === selected.id).sort((a, b) => new Date(b.date) - new Date(a.date))[0];
     const personActivity = ACTIVITY.filter(a => a.user === selected.id);
     return (
+      <>
       <div className="page">
         <div style={{ marginBottom: 18 }}>
           <button onClick={() => navigate({ page: 'people' })}
@@ -360,6 +361,7 @@ const PeoplePage = ({ navigate, route, toast }) => {
       </div>
       {editing && <EditPersonModal user={editing} onClose={() => setEditing(null)} onSaved={refresh} />}
       {deleting && <DeletePersonConfirm user={deleting} onClose={() => setDeleting(null)} onConfirm={() => { navigate({ page: 'people' }); }} />}
+      </>
     );
   }
 
