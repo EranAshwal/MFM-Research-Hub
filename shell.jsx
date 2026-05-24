@@ -28,6 +28,7 @@ const AvatarStack = ({ users, max = 3, size = 'sm' }) => {
 
 const Sidebar = ({ route, navigate, collapsed, currentUser, awaitingReview, awaitingUpdate, mobileOpen, onCloseMobile, onSignOut }) => {
   const inboxCount = PROJECTS.filter(p => p.awaitingReview).length + (window.UPDATES ? UPDATES.filter(u => u.piStatus === 'pending').length : 0);
+  const isAdmin = !!currentUser?.isAdmin;
   const items = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
     { id: 'inbox', label: 'Inbox', icon: 'message', badge: inboxCount },
@@ -39,7 +40,11 @@ const Sidebar = ({ route, navigate, collapsed, currentUser, awaitingReview, awai
     { id: 'deadlines', label: 'Deadlines', icon: 'calendar' },
     { id: 'files', label: 'Files', icon: 'files' },
     { id: 'people', label: 'People', icon: 'people' },
+    { id: 'notes', label: 'Notes', icon: 'mail' },
   ];
+  if (isAdmin) {
+    items.push({ id: 'users', label: 'Users & access', icon: 'user' });
+  }
   const lower = [
     { id: 'settings', label: 'Settings', icon: 'settings' },
   ];

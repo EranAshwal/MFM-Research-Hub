@@ -114,7 +114,7 @@ const InboxPage = ({ navigate, updates, toast, openReply }) => {
         const user = personById(u.user);
         const proj = PROJECTS.find(p => p.id === u.project);
         return (
-          <div key={u.id} className="card" style={{ padding: 16, display: 'grid', gridTemplateColumns: '36px 1fr auto', gap: 14, alignItems: 'flex-start' }}>
+          <div key={u.id} className="card" style={{ padding: 16, display: 'grid', gridTemplateColumns: '36px minmax(0, 1fr) auto', gap: 14, alignItems: 'flex-start' }}>
             <Avatar user={user} size="md" />
             <div style={{ minWidth: 0 }}>
               <div className="row" style={{ gap: 8, marginBottom: 4 }}>
@@ -133,7 +133,7 @@ const InboxPage = ({ navigate, updates, toast, openReply }) => {
               )}
               <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>Submitted {relDate(u.date)}</div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignSelf: 'flex-start', minWidth: 130 }}>
               <button className="btn btn-sm btn-primary" onClick={() => { openReply(u, proj); }}>
                 <Icon name="sparkle" size={12} /> Suggest reply
               </button>

@@ -823,116 +823,79 @@ const LoginModal = ({ open, onClose, onSignIn }) => {
           {/* Form */}
           <div style={{ padding: 36, display: 'flex', flexDirection: 'column' }}>
             <div className="row between">
-              <div className="serif" style={{ fontSize: 20, fontWeight: 600 }}>{mode === 'login' ? 'Sign in' : 'Choose a demo account'}</div>
+              <div className="serif" style={{ fontSize: 20, fontWeight: 600 }}>{signupMode ? 'Create account' : 'Sign in'}</div>
               <button className="btn-icon btn-ghost" onClick={onClose}><Icon name="close" size={16} /></button>
             </div>
-            <div style={{ display: 'flex', gap: 4, marginTop: 14, padding: 3, background: 'var(--bg-elevated)', borderRadius: 8, alignSelf: 'flex-start' }}>
-              <button onClick={() => setMode('login')}
-                      style={{ padding: '6px 12px', fontSize: 12, fontWeight: 500, borderRadius: 6, background: mode === 'login' ? 'var(--paper)' : 'transparent', boxShadow: mode === 'login' ? 'var(--shadow-1)' : 'none', color: mode === 'login' ? 'var(--ink)' : 'var(--muted)' }}>
-                Sign in
-              </button>
-              <button onClick={() => setMode('demo')}
-                      style={{ padding: '6px 12px', fontSize: 12, fontWeight: 500, borderRadius: 6, background: mode === 'demo' ? 'var(--paper)' : 'transparent', boxShadow: mode === 'demo' ? 'var(--shadow-1)' : 'none', color: mode === 'demo' ? 'var(--ink)' : 'var(--muted)' }}>
-                Demo accounts
-              </button>
-            </div>
 
-            {mode === 'login' ? (
-              <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {!window.AuthService && (
-                  <div style={{ padding: 10, background: 'var(--status-amber-wash)', color: 'var(--status-amber)', fontSize: 12, borderRadius: 6, border: '1px solid var(--status-amber)' }}>
-                    Real authentication is not initialized yet. Use Demo accounts to browse, or push the latest code to your GitHub repo.
-                  </div>
-                )}
-                {authErr && (
-                  <div style={{ padding: 10, background: 'var(--status-red-wash)', color: 'var(--status-red)', fontSize: 12, borderRadius: 6, border: '1px solid var(--status-red)' }}>
-                    {authErr}
-                  </div>
-                )}
-                {signupNote && (
-                  <div style={{ padding: 10, background: 'var(--status-green-wash)', color: 'var(--status-green)', fontSize: 12, borderRadius: 6, border: '1px solid var(--status-green)' }}>
-                    {signupNote}
-                  </div>
-                )}
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted)', marginBottom: 6 }}>Email</div>
-                  <input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.ca" style={{ width: '100%' }} />
+            <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {!window.AuthService && (
+                <div style={{ padding: 10, background: 'var(--status-amber-wash)', color: 'var(--status-amber)', fontSize: 12, borderRadius: 6, border: '1px solid var(--status-amber)' }}>
+                  Authentication is not initialized yet. Please push the latest code to your GitHub repo.
                 </div>
-                <div>
-                  <div className="row between" style={{ marginBottom: 6 }}>
-                    <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted)' }}>Password</div>
-                    {!signupMode && (
-                      <button className="btn-ghost" style={{ fontSize: 11, color: 'var(--maroon)', fontWeight: 500 }}
-                              onClick={async () => {
-                                if (!email) { setAuthErr('Enter your email above first.'); return; }
-                                try {
-                                  await window.AuthService.resetPassword(email);
-                                  setSignupNote('Password reset email sent. Check your inbox.');
-                                  setAuthErr('');
-                                } catch (e) { setAuthErr(e.message); }
-                              }}>Forgot?</button>
-                    )}
-                  </div>
-                  <input value={pwd} onChange={e => setPwd(e.target.value)} type="password" placeholder="••••••••" style={{ width: '100%' }} />
+              )}
+              {authErr && (
+                <div style={{ padding: 10, background: 'var(--status-red-wash)', color: 'var(--status-red)', fontSize: 12, borderRadius: 6, border: '1px solid var(--status-red)' }}>
+                  {authErr}
                 </div>
-                <button className="btn btn-primary" style={{ justifyContent: 'center', marginTop: 6 }}
-                        disabled={authBusy || !email || !pwd || !window.AuthService}
-                        onClick={async () => {
-                          setAuthErr(''); setSignupNote(''); setAuthBusy(true);
-                          try {
-                            if (signupMode) {
-                              await window.AuthService.signUp(email, pwd);
-                              setSignupNote('Account created. Check your email to confirm, then sign in.');
-                              setSignupMode(false);
-                            } else {
-                              await window.AuthService.signIn(email, pwd);
-                              // AuthService.onChange will fire; App reacts to session
-                              onClose();
-                            }
-                          } catch (e) { setAuthErr(e.message || 'Authentication failed'); }
-                          finally { setAuthBusy(false); }
-                        }}>
-                  {authBusy ? '…' : (signupMode ? 'Create account' : 'Sign in')}
-                </button>
-                <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center' }}>
-                  {signupMode ? 'Already have an account? ' : "Don't have an account yet? "}
-                  <button className="btn-ghost" style={{ color: 'var(--maroon)', fontWeight: 500, fontSize: 11 }}
-                          onClick={() => { setSignupMode(!signupMode); setAuthErr(''); setSignupNote(''); }}>
-                    {signupMode ? 'Sign in' : 'Create one'}
-                  </button>
+              )}
+              {signupNote && (
+                <div style={{ padding: 10, background: 'var(--status-green-wash)', color: 'var(--status-green)', fontSize: 12, borderRadius: 6, border: '1px solid var(--status-green)' }}>
+                  {signupNote}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--muted)', fontSize: 11, margin: '6px 0' }}>
-                  <div style={{ flex: 1, height: 1, background: 'var(--border)' }} /> OR <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center' }}>
-                  Just browsing? <button className="btn-ghost" style={{ color: 'var(--maroon)', fontWeight: 500, fontSize: 11 }} onClick={() => setMode('demo')}>Use a demo account</button>
-                </div>
+              )}
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted)', marginBottom: 6 }}>Email</div>
+                <input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.ca" style={{ width: '100%' }} />
               </div>
-            ) : (
-              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'auto' }}>
-                {accounts.map(a => (
-                  <button key={a.user.id}
-                          onClick={() => setPicked(a.user.id)}
-                          style={{ textAlign: 'left', padding: 14, border: '1px solid', borderColor: picked === a.user.id ? 'var(--maroon)' : 'var(--border)', borderRadius: 'var(--r-sm)', display: 'flex', gap: 12, alignItems: 'center', background: picked === a.user.id ? 'var(--maroon-wash)' : 'var(--paper)', transition: 'all 0.15s' }}>
-                    <Avatar user={a.user} size="md" />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>{a.user.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{a.roleLabel} · {a.desc}</div>
-                    </div>
-                    {picked === a.user.id && <Icon name="check" size={16} stroke={2.5} color="var(--maroon)" />}
-                  </button>
-                ))}
-                <button className="btn btn-primary" style={{ justifyContent: 'center', marginTop: 8 }} disabled={!picked}
-                        onClick={() => onSignIn(PEOPLE.find(p => p.id === picked))}>
-                  Continue
+              <div>
+                <div className="row between" style={{ marginBottom: 6 }}>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted)' }}>Password</div>
+                  {!signupMode && (
+                    <button className="btn-ghost" style={{ fontSize: 11, color: 'var(--maroon)', fontWeight: 500 }}
+                            onClick={async () => {
+                              if (!email) { setAuthErr('Enter your email above first.'); return; }
+                              try {
+                                await window.AuthService.resetPassword(email);
+                                setSignupNote('Password reset email sent. Check your inbox.');
+                                setAuthErr('');
+                              } catch (e) { setAuthErr(e.message); }
+                            }}>Forgot?</button>
+                  )}
+                </div>
+                <input value={pwd} onChange={e => setPwd(e.target.value)} type="password" placeholder="••••••••" style={{ width: '100%' }} />
+              </div>
+              <button className="btn btn-primary" style={{ justifyContent: 'center', marginTop: 6 }}
+                      disabled={authBusy || !email || !pwd || !window.AuthService}
+                      onClick={async () => {
+                        setAuthErr(''); setSignupNote(''); setAuthBusy(true);
+                        try {
+                          if (signupMode) {
+                            await window.AuthService.signUp(email, pwd);
+                            setSignupNote('Account created. Check your email to confirm, then sign in.');
+                            setSignupMode(false);
+                          } else {
+                            await window.AuthService.signIn(email, pwd);
+                            onClose();
+                          }
+                        } catch (e) { setAuthErr(e.message || 'Authentication failed'); }
+                        finally { setAuthBusy(false); }
+                      }}>
+                {authBusy ? '…' : (signupMode ? 'Create account' : 'Sign in')}
+              </button>
+              <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center' }}>
+                {signupMode ? 'Already have an account? ' : "Don't have an account yet? "}
+                <button className="btn-ghost" style={{ color: 'var(--maroon)', fontWeight: 500, fontSize: 11 }}
+                        onClick={() => { setSignupMode(!signupMode); setAuthErr(''); setSignupNote(''); }}>
+                  {signupMode ? 'Sign in' : 'Create one'}
                 </button>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 };
+
 
 Object.assign(window, { PublicLanding, LoginModal });

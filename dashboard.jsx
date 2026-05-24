@@ -399,9 +399,13 @@ const Dashboard = ({ navigate, tweaks, toast, openReport, currentUser, showOnboa
 
   const isTrainee = currentUser && ['Resident', 'MFM Fellow', 'Medical Student', 'Volunteer'].includes(currentUser.role);
 
-  // Customize greeting based on role
+  // Customize greeting based on role + local time
   const greetingName = currentUser?.name.split(' ').filter(s => !s.endsWith('.'))[0] || 'there';
-  const piGreeting = currentUser?.role === 'Principal Investigator' ? `Good morning, Dr. Ashwal.` : `Hi ${greetingName} — welcome back.`;
+  const hour = new Date().getHours();
+  const timeOfDay = hour < 5 ? 'Good evening' : hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const piGreeting = currentUser?.role === 'Principal Investigator'
+    ? `${timeOfDay}, Dr. Ashwal.`
+    : `${timeOfDay}, ${greetingName}.`;
 
   return (
     <div className="page">

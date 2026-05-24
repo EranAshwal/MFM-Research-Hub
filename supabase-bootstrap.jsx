@@ -13,7 +13,15 @@
   }
 
   const startTime = performance.now();
-  const client = window.supabase.createClient(cfg.url, cfg.anonKey);
+  // sessionStorage = auth session dies when browser/tab closes (per user request).
+  const client = window.supabase.createClient(cfg.url, cfg.anonKey, {
+    auth: {
+      storage: window.sessionStorage,
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  });
   window.__sb = client; // expose for ad-hoc debugging in console
 
   const showError = (msg) => {
@@ -32,15 +40,18 @@
     console.log('[Supabase] Fetching data…');
 
     // Fetch in parallel
-    const [peopleRes, projectsRes, membersRes] = await Promise.all([
+    const [peopleRes, projectsRes, membersRes, pubsRes] = await Promise.all([
       client.from('people').select('*').order('joined', { ascending: true }),
       client.from('projects').select('*').order('start_date', { ascending: true }),
       client.from('project_members').select('*'),
+      client.from('publications').select('*').order('year', { ascending: false }),
     ]);
 
     if (peopleRes.error) throw new Error('people: ' + peopleRes.error.message);
     if (projectsRes.error) throw new Error('projects: ' + projectsRes.error.message);
     if (membersRes.error) throw new Error('project_members: ' + membersRes.error.message);
+    // publications table may not exist yet on first deploy — non-fatal
+    if (pubsRes.error) console.warn('[Supabase] publications:', pubsRes.error.message);
 
     // Map Supabase rows (snake_case) → app format (camelCase)
     const people = peopleRes.data.map(p => ({
@@ -57,6 +68,9 @@
       hasPhoto: p.has_photo,
       hasCV: p.has_cv,
       pubmedAuthor: p.pubmed_author,
+      authUserId: p.auth_user_id,
+      isAdmin: p.is_admin,
+      isApproved: p.is_approved,
     }));
 
     // Build members map: project_id → [person_id, …]
@@ -96,12 +110,22 @@
       fileCount: p.file_count,
     }));
 
+    // Map publications (snake_case → camelCase, keep fields the existing page expects)
+    const publications = (pubsRes.data || []).map(p => ({
+      id: p.id, pmid: p.pmid, doi: p.doi, title: p.title, authors: p.authors,
+      journal: p.journal, year: p.year, month: p.month, volume: p.volume, pages: p.pages,
+      type: p.type, status: p.status, source: p.source, addedBy: p.added_by,
+    }));
+
     // Replace the in-memory arrays the rest of the app reads from
     window.PEOPLE.length = 0; people.forEach(p => window.PEOPLE.push(p));
     window.PROJECTS.length = 0; projects.forEach(p => window.PROJECTS.push(p));
+    if (publications.length) {
+      window.PUBLICATIONS.length = 0; publications.forEach(p => window.PUBLICATIONS.push(p));
+    }
 
     const ms = Math.round(performance.now() - startTime);
-    console.log(`[Supabase] Loaded ${people.length} people + ${projects.length} projects in ${ms}ms`);
+    console.log(`[Supabase] Loaded ${people.length} people + ${projects.length} projects + ${publications.length} publications in ${ms}ms`);
 
     // Initialize auth service (Phase 5)
     if (window.AuthService) {

@@ -10,6 +10,9 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
 }/*EDITMODE-END*/;
 
 function App() {
+  // Check URL for invite token — handle accept-invite flow first
+  const inviteToken = new URLSearchParams(location.search).get('invite');
+
   const [route, setRoute] = useState({ page: 'landing' });
   const [currentUser, setCurrentUser] = useState(null);
   const [search, setSearch] = useState('');
@@ -93,15 +96,31 @@ function App() {
     setNotifs(n => [{ id: `n-${Date.now()}`, type: 'update', project: u.project, text: `${personById(u.user)?.name} submitted a progress update`, date: u.date, unread: true }, ...n]);
   };
 
-  const sendNotification = ({ recipients, projectId, message }) => {
+  const sendNotification = async ({ recipients, projectId, message, template, channel }) => {
+    if (!recipients?.length) return;
     const recipientNames = recipients.map(id => personById(id)?.name.split(' ').slice(-1)[0]).join(', ');
     setShowNotify(false);
-    toast(`Notification sent to ${recipientNames}`);
-    // Add to notifications feed
+    try {
+      if (window.DataService) {
+        await window.DataService.sendNotes({
+          senderId: currentUser?.id,
+          recipients,
+          projectId: projectId || null,
+          template: template || null,
+          body: message,
+          channel,
+        });
+      }
+      toast(`Notification sent to ${recipientNames}`);
+    } catch (e) {
+      toast('Send failed: ' + (e.message || e), 'error');
+      return;
+    }
+    // Add to in-app notifications feed (visual only)
     const newNotifs = recipients.map((rid, i) => ({
       id: `n-${Date.now()}-${i}`,
       type: 'update',
-      project: projectId || (PROJECTS.find(p => p.lead === rid)?.id || PROJECTS[0].id),
+      project: projectId || (PROJECTS.find(p => p.lead === rid)?.id || PROJECTS[0]?.id),
       text: `You sent a notification to ${personById(rid)?.name}`,
       date: new Date().toISOString().slice(0, 10),
       unread: false,
@@ -122,12 +141,33 @@ function App() {
   // Open report
   const openReport = (type, project = null) => setReport({ type, project });
 
+  // ---- Accept-invite flow (URL ?invite=TOKEN) ----
+  if (inviteToken) {
+    return (
+      <>
+        <AcceptInviteScreen token={inviteToken} />
+        <Toast toasts={toasts} />
+      </>
+    );
+  }
+
   // ---- Landing / login flow ----
   if (route.page === 'landing' || !currentUser) {
     return (
       <>
         <PublicLanding navigate={navigate} setShowLogin={setShowLogin} />
         <LoginModal open={showLogin} onClose={() => setShowLogin(false)} onSignIn={onSignIn} />
+        <Toast toasts={toasts} />
+      </>
+    );
+  }
+
+  // ---- Pending approval gate ----
+  // Signed in but not approved by admin yet — show waitlist screen.
+  if (currentUser && !currentUser.isAdmin && !currentUser.isApproved) {
+    return (
+      <>
+        <PendingApprovalScreen currentUser={currentUser} onSignOut={onSignOut} />
         <Toast toasts={toasts} />
       </>
     );
@@ -151,6 +191,8 @@ function App() {
   else if (route.page === 'calendar') pageEl = <CalendarPage navigate={navigate} />;
   else if (route.page === 'files') pageEl = <FilesGlobalPage navigate={navigate} />;
   else if (route.page === 'people') pageEl = <PeoplePage navigate={navigate} route={route} toast={toast} />;
+  else if (route.page === 'users' && currentUser.isAdmin) pageEl = <UsersAdminPage toast={toast} />;
+  else if (route.page === 'notes') pageEl = <NotesInboxPage currentUser={currentUser} navigate={navigate} toast={toast} />;
   else if (route.page === 'settings') pageEl = <SettingsPage tweaks={t} setTweak={setTweak} toast={toast} />;
   else pageEl = <Dashboard navigate={navigate} tweaks={t} toast={toast} openReport={openReport} currentUser={currentUser} showOnboarding={showOnboarding} dismissOnboarding={() => setShowOnboarding(false)} />;
 
@@ -210,8 +252,9 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(null); // placeholder; bootstrap mounts the real App
+const __mfmRoot = ReactDOM.createRoot(document.getElementById('root'));
+__mfmRoot.render(null); // placeholder; bootstrap re-renders the real App
 
 window.mountApp = () => {
-  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  __mfmRoot.render(<App />);
 };

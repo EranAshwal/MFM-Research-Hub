@@ -1,7 +1,10 @@
 /* MFM Research Hub — Publications page (PubMed sync + manual add) */
 
 const PublicationsPage = ({ toast }) => {
-  const [pubs, setPubs] = useState(PUBLICATIONS);
+  const [, force] = useState(0);
+  const refresh = () => force(n => n + 1);
+  const pubs = window.PUBLICATIONS || [];
+  const isAdmin = !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
   const [search, setSearch] = useState('');
   const [yearF, setYearF] = useState('');
   const [typeF, setTypeF] = useState('');
@@ -32,16 +35,25 @@ const PublicationsPage = ({ toast }) => {
     }, 1800);
   };
 
-  const addPub = (p) => {
-    setPubs([{ ...p, id: `pub-${Date.now()}`, source: 'manual', addedBy: 'u1' }, ...pubs]);
-    setShowAdd(false);
-    toast('Publication added');
+  const addPub = async (p) => {
+    try {
+      await window.DataService.createPublication({ ...p, source: 'manual', addedBy: window.AuthService?.getCurrentPerson()?.id });
+      setShowAdd(false);
+      toast('Publication added');
+      refresh();
+    } catch (err) {
+      toast('Failed to add publication: ' + err.message, 'error');
+    }
   };
 
-  const removePub = (id) => {
-    if (confirm('Remove this publication from the list?')) {
-      setPubs(pubs.filter(p => p.id !== id));
+  const removePub = async (id) => {
+    if (!confirm('Remove this publication from the list?')) return;
+    try {
+      await window.DataService.deletePublication(id);
       toast('Publication removed');
+      refresh();
+    } catch (err) {
+      toast('Failed to remove: ' + err.message, 'error');
     }
   };
 
@@ -56,15 +68,19 @@ const PublicationsPage = ({ toast }) => {
           <p className="page-sub">Synced from PubMed for author <strong style={{ color: 'var(--ink)' }}>{pubmedAuthor}</strong> · {pubs.length} entries</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn" onClick={() => setShowAdd(true)}>
-            <Icon name="plus" size={14} stroke={2} /> Add manually
-          </button>
+          {isAdmin && (
+            <button className="btn" onClick={() => setShowAdd(true)}>
+              <Icon name="plus" size={14} stroke={2} /> Add manually
+            </button>
+          )}
           <button className="btn" onClick={() => toast('Exported as BibTeX')}>
             <Icon name="download" size={14} /> Export BibTeX
           </button>
-          <button className="btn btn-primary" onClick={syncPubmed} disabled={syncing}>
-            {syncing ? <><span className="skel" style={{ width: 14, height: 14, borderRadius: '50%' }} /> Syncing…</> : <><Icon name="updates" size={14} /> Sync from PubMed</>}
-          </button>
+          {isAdmin && (
+            <button className="btn btn-primary" onClick={syncPubmed} disabled={syncing}>
+              {syncing ? <><span className="skel" style={{ width: 14, height: 14, borderRadius: '50%' }} /> Syncing…</> : <><Icon name="updates" size={14} /> Sync from PubMed</>}
+            </button>
+          )}
         </div>
       </div>
 
@@ -186,7 +202,7 @@ const PublicationsPage = ({ toast }) => {
                 {pub.source === 'manual' && <span className="chip chip-maroon">Manual add</span>}
                 {pub.source === 'pubmed' && <span className="chip chip-bayfront">PubMed</span>}
               </div>
-              <button className="btn-icon btn-ghost" onClick={() => removePub(pub.id)} title="Remove">
+              <button className="btn-icon btn-ghost" onClick={() => removePub(pub.id)} title="Remove" style={{ visibility: isAdmin ? 'visible' : 'hidden' }}>
                 <Icon name="close" size={14} />
               </button>
             </div>

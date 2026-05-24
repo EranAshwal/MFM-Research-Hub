@@ -84,15 +84,24 @@ window.AuthService = {
         bio: person.bio,
         hasPhoto: person.has_photo,
         hasCV: person.has_cv,
+        authUserId: person.auth_user_id,
+        isAdmin: !!person.is_admin,
+        isApproved: !!person.is_approved,
       };
     } else {
-      // Authenticated but no people row — create a placeholder
+      // Authenticated but no people row — create a placeholder, NOT approved
       this._person = {
         id: userId, name: userEmail || 'New user', initials: (userEmail || '?').slice(0, 2).toUpperCase(),
         role: 'Collaborator', training: 'Pending', email: userEmail, color: '#495965', joined: '', focus: '',
+        isAdmin: false, isApproved: false, isPlaceholder: true,
       };
     }
   },
+
+  // Convenience predicates the UI can read off the live person object
+  isAdmin() { return !!(this._person && this._person.isAdmin); },
+  isApproved() { return !!(this._person && this._person.isApproved); },
+  isSignedIn() { return !!this._session; },
 
   async signIn(email, password) {
     if (!window.__sb) throw new Error('Supabase not initialized');

@@ -7,10 +7,11 @@ const sb = () => window.__sb;
 
 // Refresh data from Supabase after a mutation
 const refreshAll = async () => {
-  const [peopleRes, projectsRes, membersRes] = await Promise.all([
+  const [peopleRes, projectsRes, membersRes, pubsRes] = await Promise.all([
     sb().from('people').select('*').order('joined', { ascending: true }),
     sb().from('projects').select('*').order('start_date', { ascending: true }),
     sb().from('project_members').select('*'),
+    sb().from('publications').select('*').order('year', { ascending: false }),
   ]);
 
   if (peopleRes.data) {
@@ -18,6 +19,7 @@ const refreshAll = async () => {
       id: p.id, name: p.name, initials: p.initials, role: p.role, training: p.training,
       email: p.email, color: p.color, joined: p.joined ? p.joined.slice(0, 7) : '',
       focus: p.focus, bio: p.bio, hasPhoto: p.has_photo, hasCV: p.has_cv, pubmedAuthor: p.pubmed_author,
+      authUserId: p.auth_user_id, isAdmin: p.is_admin, isApproved: p.is_approved,
     }));
     window.PEOPLE.length = 0; people.forEach(p => window.PEOPLE.push(p));
   }
@@ -38,6 +40,16 @@ const refreshAll = async () => {
       nextDue: p.next_due, fileCount: p.file_count,
     }));
     window.PROJECTS.length = 0; projects.forEach(p => window.PROJECTS.push(p));
+  }
+  if (pubsRes && pubsRes.data) {
+    const publications = pubsRes.data.map(p => ({
+      id: p.id, pmid: p.pmid, doi: p.doi, title: p.title, authors: p.authors,
+      journal: p.journal, year: p.year, month: p.month, volume: p.volume, pages: p.pages,
+      type: p.type, status: p.status, source: p.source, addedBy: p.added_by,
+    }));
+    window.PUBLICATIONS.length = 0; publications.forEach(p => window.PUBLICATIONS.push(p));
+    // Notify subscribers
+    window.__pubChangeListeners?.forEach(cb => { try { cb(); } catch (e) {} });
   }
 };
 
@@ -160,5 +172,173 @@ window.DataService = {
       project_id: projectId, user_id: userId,
       action_type: actionType, text, detail,
     });
+  },
+
+  // ============= PUBLICATIONS =============
+  async createPublication(patch) {
+    const row = {
+      pmid: patch.pmid || null,
+      doi: patch.doi || null,
+      title: patch.title,
+      authors: patch.authors,
+      journal: patch.journal || null,
+      year: patch.year || null,
+      month: patch.month || null,
+      volume: patch.volume || null,
+      pages: patch.pages || null,
+      type: patch.type || 'Original article',
+      status: patch.status || 'Published',
+      source: patch.source || 'manual',
+      added_by: patch.addedBy || null,
+    };
+    if (!row.title) throw new Error('Title required');
+    if (!row.authors) throw new Error('Authors required');
+    const { data, error } = await sb().from('publications').insert(row).select().single();
+    if (error) throw error;
+    await refreshAll();
+    return data;
+  },
+
+  async updatePublication(id, patch) {
+    const map = {
+      pmid: 'pmid', doi: 'doi', title: 'title', authors: 'authors', journal: 'journal',
+      year: 'year', month: 'month', volume: 'volume', pages: 'pages',
+      type: 'type', status: 'status', source: 'source',
+    };
+    const row = {};
+    Object.keys(patch).forEach(k => { if (map[k]) row[map[k]] = patch[k]; });
+    row.updated_at = new Date().toISOString();
+    const { error } = await sb().from('publications').update(row).eq('id', id);
+    if (error) throw error;
+    await refreshAll();
+  },
+
+  async deletePublication(id) {
+    const { error } = await sb().from('publications').delete().eq('id', id);
+    if (error) throw error;
+    await refreshAll();
+  },
+
+  // ============= NOTES (admin-to-people messages) =============
+  // Send one note to each recipient. `recipients` is an array of person IDs.
+  async sendNotes({ senderId, recipients, projectId, template, subject, body, channel }) {
+    if (!recipients || !recipients.length) throw new Error('No recipients');
+    if (!body || !body.trim()) throw new Error('Message body required');
+    const rows = recipients.map(rid => ({
+      sender_id: senderId || null,
+      recipient_id: rid,
+      project_id: projectId || null,
+      template: template || null,
+      subject: subject || null,
+      body,
+      channel_in_app: channel?.inApp ?? true,
+      channel_email:  channel?.email ?? false,
+    }));
+    const { data, error } = await sb().from('notes').insert(rows).select();
+    if (error) throw error;
+    return data;
+  },
+
+  async listNotesFor(personId) {
+    const { data, error } = await sb().from('notes')
+      .select('*')
+      .or(`recipient_id.eq.${personId},sender_id.eq.${personId}`)
+      .order('sent_at', { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    return data;
+  },
+
+  async markNoteRead(id) {
+    const { error } = await sb().from('notes')
+      .update({ read_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  async deleteNote(id) {
+    const { error } = await sb().from('notes').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  // ============= APPROVAL (admin only) =============
+  async setApproval(personId, approved) {
+    const { error } = await sb().from('people')
+      .update({ is_approved: !!approved }).eq('id', personId);
+    if (error) throw error;
+    await refreshAll();
+  },
+
+  async setAdmin(personId, isAdmin) {
+    const { error } = await sb().from('people')
+      .update({ is_admin: !!isAdmin }).eq('id', personId);
+    if (error) throw error;
+    await refreshAll();
+  },
+
+  // ============= INVITATIONS =============
+  // Default consent text shown to invitees. Snapshotted on each invitation
+  // so changes to this template don't affect past consents.
+  DEFAULT_CONSENT_TEXT: `By accepting this invitation and creating an account on the MFM Research Hub, I consent to:
+
+1. Being listed as a member of the research team on this private internal site.
+2. My name, role, and institutional affiliation being shown to other approved team members.
+3. My profile being associated with the projects to which I have been added by the principal investigator.
+
+I understand that:
+• This consent is recorded with a timestamp and stored as a permanent audit record.
+• I can request removal of my profile at any time by contacting the site administrator.
+• The site is access-controlled — only approved team members can view its contents.
+• No data is published externally without my separate, explicit consent.`,
+
+  async createInvitation({ email, invitedName, invitedRole, invitedTraining, message, consentText, senderId }) {
+    if (!email) throw new Error('Email is required');
+    const row = {
+      email: email.trim().toLowerCase(),
+      invited_name: invitedName || null,
+      invited_role: invitedRole || 'Collaborator',
+      invited_training: invitedTraining || null,
+      consent_text: consentText || this.DEFAULT_CONSENT_TEXT,
+      message: message || null,
+      sent_by: senderId || null,
+    };
+    const { data, error } = await sb().from('invitations').insert(row).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  async listInvitations() {
+    const { data, error } = await sb().from('invitations')
+      .select('*').order('sent_at', { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+
+  async revokeInvitation(id) {
+    const { error } = await sb().from('invitations')
+      .update({ revoked_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw error;
+  },
+
+  async deleteInvitation(id) {
+    const { error } = await sb().from('invitations').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  async getInvitationByToken(token) {
+    const { data, error } = await sb().from('invitations')
+      .select('*').eq('token', token).maybeSingle();
+    if (error) throw error;
+    return data;
+  },
+
+  async acceptInvitation(token) {
+    const { data, error } = await sb().rpc('accept_invitation', {
+      p_token: token,
+      p_user_agent: navigator.userAgent || null,
+    });
+    if (error) throw error;
+    await refreshAll();
+    return data; // returns person_id
   },
 };
