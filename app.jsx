@@ -158,7 +158,8 @@ function App() {
     <div className="app-shell">
       <Sidebar route={route} navigate={navigate} collapsed={collapsed} currentUser={currentUser}
                awaitingReview={awaitingReview} awaitingUpdate={awaitingUpdate}
-               mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
+               mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)}
+               onSignOut={onSignOut} />
       <div className={`mobile-scrim ${mobileOpen ? 'show' : ''}`} onClick={() => setMobileOpen(false)} />
       <div className="main">
         <Topbar collapsed={collapsed} setCollapsed={setCollapsed} search={search} setSearch={setSearch}

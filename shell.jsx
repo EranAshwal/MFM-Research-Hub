@@ -26,7 +26,7 @@ const AvatarStack = ({ users, max = 3, size = 'sm' }) => {
   );
 };
 
-const Sidebar = ({ route, navigate, collapsed, currentUser, awaitingReview, awaitingUpdate, mobileOpen, onCloseMobile }) => {
+const Sidebar = ({ route, navigate, collapsed, currentUser, awaitingReview, awaitingUpdate, mobileOpen, onCloseMobile, onSignOut }) => {
   const inboxCount = PROJECTS.filter(p => p.awaitingReview).length + (window.UPDATES ? UPDATES.filter(u => u.piStatus === 'pending').length : 0);
   const items = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
@@ -86,7 +86,7 @@ const Sidebar = ({ route, navigate, collapsed, currentUser, awaitingReview, awai
               <div style={{ fontSize: 11, color: 'var(--sidebar-muted)' }}>{currentUser.role}</div>
             </div>
             <button className="btn-icon" style={{ color: 'var(--sidebar-muted)' }} title="Sign out"
-                    onClick={() => navigate({ page: 'login' })}>
+                    onClick={onSignOut}>
               <Icon name="logOut" size={15} />
             </button>
           </div>
