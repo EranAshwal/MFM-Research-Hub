@@ -74,10 +74,16 @@ const AddMemberModal = ({ project, onClose, toast, onAdded }) => {
   );
 };
 
-const TabOverview = ({ project, toast }) => {
+const TabOverview = ({ project, toast, currentUser }) => {
   const [, force] = useState(0);
   const refresh = () => force(n => n + 1);
   const [addingMember, setAddingMember] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [changingStatus, setChangingStatus] = useState(false);
+  const [addingComment, setAddingComment] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [generatingSummary, setGeneratingSummary] = useState(false);
+  const [requestingUpdate, setRequestingUpdate] = useState(false);
   const isAdmin = !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
   const pi = personById(project.pi);
   const lead = personById(project.lead);
@@ -93,6 +99,15 @@ const TabOverview = ({ project, toast }) => {
     } catch (e) { toast?.('Remove failed: ' + e.message, 'error'); }
   };
 
+  const archive = async () => {
+    if (!confirm(`Archive ${project.acronym}? It will be hidden from active project lists. You can restore it via Edit later.`)) return;
+    try {
+      await window.DataService.updateProject(project.id, { status: 'Archived' });
+      toast?.(`${project.acronym} archived`);
+      refresh();
+    } catch (e) { toast?.('Archive failed: ' + e.message, 'error'); }
+  };
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 24 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -104,7 +119,7 @@ const TabOverview = ({ project, toast }) => {
         <div className="card card-pad">
           <div className="row between" style={{ marginBottom: 16 }}>
             <h3 style={{ fontFamily: 'var(--ff-serif)', fontSize: 16, fontWeight: 600 }}>Study details</h3>
-            <button className="btn btn-sm btn-ghost"><Icon name="pencil" size={12} /> Edit</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => isAdmin && setEditing(true)} disabled={!isAdmin}><Icon name="pencil" size={12} /> Edit</button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             {[
@@ -184,13 +199,13 @@ const TabOverview = ({ project, toast }) => {
         <div className="card card-pad">
           <div className="eyebrow">Quick actions</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
-            <button className="btn"><Icon name="updates" size={14} /> Request update from trainee</button>
-            <button className="btn"><Icon name="reports" size={14} /> Generate project summary</button>
-            <button className="btn"><Icon name="upload" size={14} /> Upload file</button>
-            <button className="btn"><Icon name="message" size={14} /> Add comment</button>
+            <button className="btn" onClick={() => setRequestingUpdate(true)}><Icon name="updates" size={14} /> Request update from trainee</button>
+            <button className="btn" onClick={() => setGeneratingSummary(true)}><Icon name="reports" size={14} /> Generate project summary</button>
+            <button className="btn" onClick={() => setUploadingFile(true)}><Icon name="upload" size={14} /> Upload file</button>
+            <button className="btn" onClick={() => setAddingComment(true)}><Icon name="message" size={14} /> Add comment</button>
             <div style={{ height: 1, background: 'var(--border)', margin: '6px 0' }} />
-            <button className="btn" style={{ color: 'var(--muted)' }}><Icon name="alert" size={14} /> Change status</button>
-            <button className="btn" style={{ color: 'var(--muted)' }}>Archive project</button>
+            <button className="btn" onClick={() => isAdmin && setChangingStatus(true)} disabled={!isAdmin}><Icon name="alert" size={14} /> Change status</button>
+            <button className="btn" style={{ color: 'var(--status-red)' }} onClick={() => isAdmin && archive()} disabled={!isAdmin}>Archive project</button>
           </div>
         </div>
       </div>
@@ -199,6 +214,12 @@ const TabOverview = ({ project, toast }) => {
                         onClose={() => setAddingMember(false)}
                         onAdded={() => { refresh(); }} />
       )}
+      {editing && <EditProjectModal project={project} toast={toast} onClose={() => setEditing(false)} onSaved={refresh} />}
+      {changingStatus && <ChangeStatusModal project={project} toast={toast} onClose={() => setChangingStatus(false)} onSaved={refresh} />}
+      {addingComment && <AddCommentModal project={project} toast={toast} currentUser={currentUser} onClose={() => setAddingComment(false)} onSaved={refresh} />}
+      {uploadingFile && <UploadFileModal project={project} toast={toast} currentUser={currentUser} onClose={() => setUploadingFile(false)} />}
+      {generatingSummary && <GenerateSummaryModal project={project} toast={toast} onClose={() => setGeneratingSummary(false)} />}
+      {requestingUpdate && <RequestUpdateModal project={project} toast={toast} currentUser={currentUser} onClose={() => setRequestingUpdate(false)} />}
     </div>
   );
 };
@@ -816,7 +837,7 @@ const ProjectDetail = ({ project, route, navigate, toast, updates, addUpdate, op
         ))}
       </div>
 
-      {tab === 'overview' && <TabOverview project={project} toast={toast} />}
+      {tab === 'overview' && <TabOverview project={project} toast={toast} currentUser={window.AuthService?.getCurrentPerson()} />}
       {tab === 'timeline' && <TabTimeline project={project} />}
       {tab === 'tasks' && <TabTasks project={project} toast={toast} />}
       {tab === 'updates' && <TabUpdates project={project} toast={toast} updates={updates} addUpdate={addUpdate} />}

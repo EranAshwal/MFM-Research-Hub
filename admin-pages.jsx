@@ -81,7 +81,17 @@ const UsersAdminPage = ({ toast }) => {
 
   return (
     <div className="page">
-      <div className="page-header row between" style={{ alignItems: 'flex-start' }}>
+      <style>{`
+        @media (max-width: 720px) {
+          .users-grid { grid-template-columns: 1fr !important; gap: 8px !important; }
+          .users-grid-header { display: none !important; }
+          .users-row { padding: 14px 16px !important; }
+          .users-row-actions { justify-content: flex-start !important; }
+          .invites-grid { grid-template-columns: 1fr !important; }
+          .invites-header { display: none !important; }
+        }
+      `}</style>
+      <div className="page-header row between" style={{ alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 className="page-title">Users & access</h1>
           <p className="page-sub">{pendingCount > 0 ? `${pendingCount} pending approval · ` : ''}{people.length} total · {invites.filter(i => !i.accepted_at && !i.revoked_at).length} open invitations</p>
@@ -169,7 +179,7 @@ const UsersAdminPage = ({ toast }) => {
       <h2 style={{ fontFamily: 'var(--ff-serif)', fontSize: 16, fontWeight: 600, margin: '10px 0 10px' }}>Team members</h2>
 
       <div className="card" style={{ overflow: 'hidden' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px 120px 100px 220px', gap: 12, padding: '12px 20px',
+        <div className="users-grid users-grid-header" style={{ display: 'grid', gridTemplateColumns: '1fr 160px 120px 100px 220px', gap: 12, padding: '12px 20px',
                       background: 'var(--bg-elevated)', fontSize: 11, fontWeight: 600, color: 'var(--muted)',
                       textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--hairline)' }}>
           <div>Name</div><div>Role</div><div>Status</div><div>Admin</div><div style={{ textAlign: 'right' }}>Actions</div>
@@ -180,7 +190,7 @@ const UsersAdminPage = ({ toast }) => {
         )}
 
         {people.map((p, i) => (
-          <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1fr 160px 120px 100px 220px', gap: 12,
+          <div key={p.id} className="users-grid users-row" style={{ display: 'grid', gridTemplateColumns: '1fr 160px 120px 100px 220px', gap: 12,
                                     padding: '14px 20px', alignItems: 'center',
                                     borderBottom: i === people.length - 1 ? 'none' : '1px solid var(--hairline)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
@@ -629,7 +639,13 @@ const AcceptInviteScreen = ({ token, onAccepted }) => {
           {step === 'password' && (
             <form onSubmit={submit}>
               <div style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)', marginBottom: 10 }}>
-                {mode === 'signup' ? 'Set a password' : 'Sign in'}
+                {mode === 'signup' ? 'Create your account' : 'Sign in to your existing account'}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14, lineHeight: 1.5 }}>
+                {mode === 'signup'
+                  ? <>You don't have an account yet. <strong style={{ color: 'var(--ink)' }}>Choose a password</strong> for <code>{invite.email}</code> — you'll use it to sign in later.</>
+                  : <>If you already have an account with <code>{invite.email}</code>, enter your password.</>
+                }
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div>
@@ -637,19 +653,19 @@ const AcceptInviteScreen = ({ token, onAccepted }) => {
                   <input type="email" value={invite.email} disabled style={{ width: '100%' }} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Password {mode === 'signup' && '(min 6 characters)'}</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>{mode === 'signup' ? 'Choose a password (min 6 characters)' : 'Your password'}</div>
                   <input type="password" required minLength={6} value={password} onChange={e => setPassword(e.target.value)}
                          autoFocus style={{ width: '100%' }} />
                 </div>
               </div>
               {error && <div style={{ color: 'var(--status-red)', fontSize: 12, marginTop: 12 }}>{error}</div>}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 18 }}>
-                <button type="button" className="btn-ghost" style={{ fontSize: 12, color: 'var(--maroon)' }}
-                        onClick={() => setMode(mode === 'signup' ? 'signin' : 'signup')}>
-                  {mode === 'signup' ? 'Already have an account? Sign in instead' : 'Need to create one? Sign up instead'}
+              <div style={{ marginTop: 18 }}>
+                <button type="submit" className="btn btn-primary" disabled={busy || !password} style={{ width: '100%', justifyContent: 'center', padding: '12px 18px' }}>
+                  {busy ? 'Working…' : (mode === 'signup' ? 'Create account & enter' : 'Sign in & enter')}
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={busy || !password}>
-                  {busy ? 'Working…' : 'Accept & enter'}
+                <button type="button" className="btn-ghost" style={{ fontSize: 12, color: 'var(--maroon)', marginTop: 10, width: '100%', textAlign: 'center', display: 'block' }}
+                        onClick={() => { setMode(mode === 'signup' ? 'signin' : 'signup'); setError(null); }}>
+                  {mode === 'signup' ? 'I already have an account — sign in instead' : 'I need to create a new account'}
                 </button>
               </div>
             </form>
