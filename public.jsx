@@ -814,9 +814,9 @@ const LoginModal = ({ open, onClose, onSignIn }) => {
             </div>
             <div style={{ position: 'relative', zIndex: 1, fontSize: 12, opacity: 0.8 }}>
               <div style={{ marginBottom: 8, color: 'var(--gold)' }}>
-                <Icon name="alert" size={13} /> &nbsp;Prototype — no real authentication
+                <Icon name="user" size={13} /> &nbsp;Sign in with your account email
               </div>
-              Institutional SSO (McMaster / HHS) is a planned future integration.
+              Or use a demo account to browse the site without signing in.
             </div>
           </div>
 
