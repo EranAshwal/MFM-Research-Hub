@@ -186,4 +186,8 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+ReactDOM.createRoot(document.getElementById('root')).render(null); // placeholder; bootstrap mounts the real App
+
+window.mountApp = () => {
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+};
