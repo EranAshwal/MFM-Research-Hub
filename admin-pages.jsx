@@ -354,15 +354,16 @@ window.NotesInboxPage = NotesInboxPage;
 // =========================================================================
 
 const InviteComposeModal = ({ open, onClose, currentUser, toast, onCreated }) => {
-  if (!open) return null;
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState('Collaborator');
   const [training, setTraining] = useState('');
   const [message, setMessage] = useState('');
-  const [consentText, setConsentText] = useState(window.DataService.DEFAULT_CONSENT_TEXT);
+  const [consentText, setConsentText] = useState(() => window.DataService?.DEFAULT_CONSENT_TEXT || '');
   const [sending, setSending] = useState(false);
   const [created, setCreated] = useState(null);
+
+  if (!open) return null;
 
   const submit = async (e) => {
     e.preventDefault();
