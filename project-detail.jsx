@@ -1,9 +1,98 @@
 /* MFM Research Hub — project detail workspace (7 tabs) */
 
-const TabOverview = ({ project }) => {
+// Pick a person from PEOPLE to add to a project
+const AddMemberModal = ({ project, onClose, toast, onAdded }) => {
+  const [search, setSearch] = useState('');
+  const [role, setRole] = useState('Member');
+  const [adding, setAdding] = useState(null);
+  const memberIds = new Set(project.members || []);
+  const available = PEOPLE.filter(p =>
+    !memberIds.has(p.id) &&
+    p.id !== project.pi && p.id !== project.lead &&
+    (!search || (p.name + ' ' + p.role + ' ' + (p.email || '')).toLowerCase().includes(search.toLowerCase()))
+  );
+
+  const add = async (person) => {
+    setAdding(person.id);
+    try {
+      await window.DataService.addProjectMember(project.id, person.id, role);
+      toast?.(`${person.name} added to ${project.acronym}`);
+      onAdded?.();
+    } catch (e) {
+      toast?.('Add failed: ' + e.message, 'error');
+    }
+    setAdding(null);
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 540 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-h">
+          <div>
+            <div className="serif" style={{ fontSize: 18, fontWeight: 600 }}>Add member to {project.acronym}</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Pick someone from the team</div>
+          </div>
+          <button className="btn-icon btn-ghost" onClick={onClose}><Icon name="close" size={16} /></button>
+        </div>
+        <div className="modal-b" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px', gap: 8 }}>
+            <input value={search} onChange={e => setSearch(e.target.value)}
+                   placeholder="Search by name, role, email…" autoFocus style={{ width: '100%' }} />
+            <select value={role} onChange={e => setRole(e.target.value)} style={{ width: '100%' }}>
+              {['Member','Lead','Co-Investigator','Trainee','Statistician','Collaborator'].map(r =>
+                <option key={r}>{r}</option>)}
+            </select>
+          </div>
+          <div style={{ maxHeight: 360, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 6,
+                        border: '1px solid var(--hairline)', borderRadius: 8, padding: 6 }}>
+            {available.length === 0 && (
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
+                {search ? 'No matches.' : 'Everyone has already been added to this project.'}
+              </div>
+            )}
+            {available.map(p => (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
+                                        borderRadius: 6, cursor: adding === p.id ? 'wait' : 'default',
+                                        background: adding === p.id ? 'var(--bg-elevated)' : 'transparent' }}>
+                <Avatar user={p} size="sm" />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>{p.role} · {p.training}</div>
+                </div>
+                <button className="btn btn-sm btn-primary" disabled={adding === p.id} onClick={() => add(p)}>
+                  {adding === p.id ? 'Adding…' : 'Add'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="modal-f">
+          <button className="btn btn-ghost" onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const TabOverview = ({ project, toast }) => {
+  const [, force] = useState(0);
+  const refresh = () => force(n => n + 1);
+  const [addingMember, setAddingMember] = useState(false);
+  const isAdmin = !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
   const pi = personById(project.pi);
   const lead = personById(project.lead);
   const members = project.members.map(personById).filter(Boolean);
+
+  const removeMember = async (personId) => {
+    const person = personById(personId);
+    if (!confirm(`Remove ${person?.name} from ${project.acronym}?`)) return;
+    try {
+      await window.DataService.removeProjectMember(project.id, personId);
+      toast?.(`${person?.name} removed from project`);
+      refresh();
+    } catch (e) { toast?.('Remove failed: ' + e.message, 'error'); }
+  };
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 24 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -50,11 +139,18 @@ const TabOverview = ({ project }) => {
                 </div>
                 {m.id === lead?.id && <span className="chip chip-maroon">Lead</span>}
                 {m.id === pi?.id && <span className="chip chip-gold">PI</span>}
+                {isAdmin && m.id !== pi?.id && m.id !== lead?.id && (
+                  <button className="btn-icon btn-ghost" onClick={() => removeMember(m.id)} title="Remove from project">
+                    <Icon name="close" size={13} />
+                  </button>
+                )}
               </div>
             ))}
-            <button className="btn btn-sm" style={{ alignSelf: 'flex-start', marginTop: 4 }}>
-              <Icon name="plus" size={12} stroke={2} /> Add member
-            </button>
+            {isAdmin && (
+              <button className="btn btn-sm" style={{ alignSelf: 'flex-start', marginTop: 4 }} onClick={() => setAddingMember(true)}>
+                <Icon name="plus" size={12} stroke={2} /> Add member
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -98,6 +194,11 @@ const TabOverview = ({ project }) => {
           </div>
         </div>
       </div>
+      {addingMember && (
+        <AddMemberModal project={project} toast={toast}
+                        onClose={() => setAddingMember(false)}
+                        onAdded={() => { refresh(); }} />
+      )}
     </div>
   );
 };
@@ -715,7 +816,7 @@ const ProjectDetail = ({ project, route, navigate, toast, updates, addUpdate, op
         ))}
       </div>
 
-      {tab === 'overview' && <TabOverview project={project} />}
+      {tab === 'overview' && <TabOverview project={project} toast={toast} />}
       {tab === 'timeline' && <TabTimeline project={project} />}
       {tab === 'tasks' && <TabTasks project={project} toast={toast} />}
       {tab === 'updates' && <TabUpdates project={project} toast={toast} updates={updates} addUpdate={addUpdate} />}
