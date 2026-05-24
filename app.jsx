@@ -150,7 +150,7 @@ function App() {
   else if (route.page === 'publications') pageEl = <PublicationsPage toast={toast} />;
   else if (route.page === 'calendar') pageEl = <CalendarPage navigate={navigate} />;
   else if (route.page === 'files') pageEl = <FilesGlobalPage navigate={navigate} />;
-  else if (route.page === 'people') pageEl = <PeoplePage navigate={navigate} route={route} />;
+  else if (route.page === 'people') pageEl = <PeoplePage navigate={navigate} route={route} toast={toast} />;
   else if (route.page === 'settings') pageEl = <SettingsPage tweaks={t} setTweak={setTweak} toast={toast} />;
   else pageEl = <Dashboard navigate={navigate} tweaks={t} toast={toast} openReport={openReport} currentUser={currentUser} showOnboarding={showOnboarding} dismissOnboarding={() => setShowOnboarding(false)} />;
 

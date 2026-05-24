@@ -1,5 +1,149 @@
 /* MFM Research Hub — people, reports modal, tasks, updates, calendar, files (global), settings */
 
+const EditPersonModal = ({ user, onClose, onSaved, mode = 'edit' }) => {
+  const [form, setForm] = useState({
+    name: user?.name || '',
+    initials: user?.initials || '',
+    role: user?.role || 'Collaborator',
+    training: user?.training || '',
+    email: user?.email || '',
+    focus: user?.focus || '',
+    bio: user?.bio || '',
+    color: user?.color || '#7A003C',
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!window.DataService) { setErr('Data service not ready'); return; }
+    setSaving(true); setErr('');
+    try {
+      if (mode === 'add') {
+        await window.DataService.createPerson(form);
+      } else {
+        await window.DataService.updatePerson(user.id, form);
+      }
+      onSaved?.();
+      onClose();
+    } catch (e) {
+      setErr(e.message || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const ROLES = ['Principal Investigator','Co-Investigator','Co-Supervisor','MFM Fellow','Resident','Medical Student','Research Coordinator','Biostatistician','Neonatology','Collaborator','Volunteer','Industry Partner'];
+  const COLORS = ['#7A003C','#5C002D','#9C2E5E','#0D5D78','#0E5B3D','#137A4B','#B4760E','#9A2A2A','#495965','#6B7785'];
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <form className="modal" style={{ maxWidth: 580 }} onClick={e => e.stopPropagation()} onSubmit={submit}>
+        <div className="modal-h">
+          <div className="serif" style={{ fontSize: 20, fontWeight: 600 }}>{mode === 'add' ? 'Add a person' : 'Edit ' + (user?.name?.split(' ')[0] || 'person')}</div>
+          <button type="button" className="btn-icon btn-ghost" onClick={onClose}><Icon name="close" size={16} /></button>
+        </div>
+        <div className="modal-b">
+          {err && <div style={{ padding: 10, background: 'var(--status-red-wash)', color: 'var(--status-red)', fontSize: 12, borderRadius: 6, marginBottom: 14 }}>{err}</div>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Full name <span style={{ color: 'var(--status-red)' }}>*</span></div>
+                <input required value={form.name} onChange={e => set('name', e.target.value)} style={{ width: '100%' }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Initials</div>
+                <input value={form.initials} onChange={e => set('initials', e.target.value.slice(0, 3).toUpperCase())} placeholder="(auto)" style={{ width: '100%' }} />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Role</div>
+                <select value={form.role} onChange={e => set('role', e.target.value)} style={{ width: '100%' }}>
+                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Training level</div>
+                <input value={form.training} onChange={e => set('training', e.target.value)} placeholder="e.g. PGY-3, Fellow Y1" style={{ width: '100%' }} />
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Email</div>
+              <input type="email" value={form.email} onChange={e => set('email', e.target.value)} style={{ width: '100%' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Research focus</div>
+              <input value={form.focus} onChange={e => set('focus', e.target.value)} placeholder="e.g. Cervical length screening" style={{ width: '100%' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Bio / about</div>
+              <textarea rows={3} value={form.bio || ''} onChange={e => set('bio', e.target.value)} style={{ width: '100%', resize: 'vertical', fontFamily: 'var(--ff-sans)', fontSize: 13 }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Avatar color</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {COLORS.map(c => (
+                  <button key={c} type="button" onClick={() => set('color', c)}
+                          style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: form.color === c ? '3px solid var(--ink)' : '3px solid transparent' }} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="modal-f">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={saving || !form.name.trim()}>
+            {saving ? 'Saving…' : (mode === 'add' ? 'Add person' : 'Save changes')}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+const DeletePersonConfirm = ({ user, onClose, onConfirm }) => {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const projectCount = PROJECTS.filter(p => p.lead === user.id || p.members.includes(user.id)).length;
+  const handleConfirm = async () => {
+    setBusy(true); setErr('');
+    try {
+      await window.DataService.deletePerson(user.id);
+      onConfirm?.();
+      onClose();
+    } catch (e) { setErr(e.message); setBusy(false); }
+  };
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-h">
+          <div className="serif" style={{ fontSize: 18, fontWeight: 600 }}>Delete {user.name}?</div>
+          <button className="btn-icon btn-ghost" onClick={onClose}><Icon name="close" size={16} /></button>
+        </div>
+        <div className="modal-b">
+          {err && <div style={{ padding: 10, background: 'var(--status-red-wash)', color: 'var(--status-red)', fontSize: 12, borderRadius: 6, marginBottom: 12 }}>{err}</div>}
+          <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--ink-2)' }}>
+            This will permanently remove {user.name} from your research hub.
+            {projectCount > 0 && (
+              <> They are currently linked to <strong>{projectCount} project{projectCount === 1 ? '' : 's'}</strong>; those project memberships will be removed automatically.</>
+            )}
+          </p>
+          <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10 }}>This cannot be undone. Their progress updates and comments (if any) will remain in the activity log.</p>
+        </div>
+        <div className="modal-f">
+          <button className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn" style={{ background: 'var(--status-red)', color: '#fff', borderColor: 'var(--status-red)' }} disabled={busy} onClick={handleConfirm}>
+            {busy ? 'Deleting…' : 'Yes, delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ProfilePhoto = ({ user }) => {
   const [photo, setPhoto] = useState(user.hasPhoto || null);
   const [dragOver, setDragOver] = useState(false);
@@ -78,9 +222,15 @@ const ProfileCV = ({ user }) => {
   );
 };
 
-const PeoplePage = ({ navigate, route }) => {
+const PeoplePage = ({ navigate, route, toast }) => {
   const [roleF, setRoleF] = useState('');
   const [search, setSearch] = useState('');
+  const [editing, setEditing] = useState(null); // person being edited
+  const [deleting, setDeleting] = useState(null); // person being deleted
+  const [adding, setAdding] = useState(false);
+  const [, forceRender] = useState(0);
+  const refresh = () => forceRender(n => n + 1);
+
   const filtered = PEOPLE.filter(p => {
     if (roleF && p.role !== roleF) return false;
     if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
@@ -117,7 +267,8 @@ const PeoplePage = ({ navigate, route }) => {
             <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid var(--hairline)' }}>
               <div className="row between" style={{ marginBottom: 6 }}>
                 <div className="eyebrow">About</div>
-                <button className="btn-ghost" style={{ fontSize: 11, color: 'var(--maroon)', fontWeight: 500 }}>
+                <button className="btn-ghost" style={{ fontSize: 11, color: 'var(--maroon)', fontWeight: 500 }}
+                        onClick={() => setEditing(selected)}>
                   <Icon name="pencil" size={11} /> Edit
                 </button>
               </div>
@@ -137,8 +288,13 @@ const PeoplePage = ({ navigate, route }) => {
             </div>
 
             <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid var(--hairline)', display: 'flex', gap: 6 }}>
-              <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }}><Icon name="message" size={12} /> Message</button>
-              <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }}><Icon name="reports" size={12} /> Report</button>
+              <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setEditing(selected)}>
+                <Icon name="pencil" size={12} /> Edit
+              </button>
+              <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center', color: 'var(--status-red)' }}
+                      onClick={() => setDeleting(selected)}>
+                <Icon name="close" size={12} /> Delete
+              </button>
             </div>
           </div>
 
@@ -202,6 +358,8 @@ const PeoplePage = ({ navigate, route }) => {
           </div>
         </div>
       </div>
+      {editing && <EditPersonModal user={editing} onClose={() => setEditing(null)} onSaved={refresh} />}
+      {deleting && <DeletePersonConfirm user={deleting} onClose={() => setDeleting(null)} onConfirm={() => { navigate({ page: 'people' }); }} />}
     );
   }
 
@@ -216,7 +374,7 @@ const PeoplePage = ({ navigate, route }) => {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn"><Icon name="upload" size={14} /> Invite</button>
-          <button className="btn btn-primary"><Icon name="plus" size={14} stroke={2} /> Add person</button>
+          <button className="btn btn-primary" onClick={() => setAdding(true)}><Icon name="plus" size={14} stroke={2} /> Add person</button>
         </div>
       </div>
       <div className="card card-pad" style={{ marginBottom: 18 }}>
@@ -253,6 +411,8 @@ const PeoplePage = ({ navigate, route }) => {
           </div>
         );
       })}
+      {adding && <EditPersonModal mode="add" onClose={() => setAdding(false)} onSaved={refresh} />}
+      {editing && <EditPersonModal user={editing} onClose={() => setEditing(null)} onSaved={refresh} />}
     </div>
   );
 };
