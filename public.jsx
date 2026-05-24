@@ -785,6 +785,10 @@ const LoginModal = ({ open, onClose, onSignIn }) => {
   const [email, setEmail] = useState('');
   const [pwd, setPwd] = useState('');
   const [picked, setPicked] = useState(null);
+  const [authErr, setAuthErr] = useState('');
+  const [authBusy, setAuthBusy] = useState(false);
+  const [signupMode, setSignupMode] = useState(false);
+  const [signupNote, setSignupNote] = useState('');
   if (!open) return null;
 
   const accounts = [
@@ -835,28 +839,73 @@ const LoginModal = ({ open, onClose, onSignIn }) => {
 
             {mode === 'login' ? (
               <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {!window.AuthService && (
+                  <div style={{ padding: 10, background: 'var(--status-amber-wash)', color: 'var(--status-amber)', fontSize: 12, borderRadius: 6, border: '1px solid var(--status-amber)' }}>
+                    Real authentication is not initialized yet. Use Demo accounts to browse, or push the latest code to your GitHub repo.
+                  </div>
+                )}
+                {authErr && (
+                  <div style={{ padding: 10, background: 'var(--status-red-wash)', color: 'var(--status-red)', fontSize: 12, borderRadius: 6, border: '1px solid var(--status-red)' }}>
+                    {authErr}
+                  </div>
+                )}
+                {signupNote && (
+                  <div style={{ padding: 10, background: 'var(--status-green-wash)', color: 'var(--status-green)', fontSize: 12, borderRadius: 6, border: '1px solid var(--status-green)' }}>
+                    {signupNote}
+                  </div>
+                )}
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted)', marginBottom: 6 }}>Email</div>
-                  <input value={email} onChange={e => setEmail(e.target.value)} placeholder="m.hassan@example.ca" style={{ width: '100%' }} />
+                  <input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.ca" style={{ width: '100%' }} />
                 </div>
                 <div>
                   <div className="row between" style={{ marginBottom: 6 }}>
                     <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted)' }}>Password</div>
-                    <button className="btn-ghost" style={{ fontSize: 11, color: 'var(--maroon)', fontWeight: 500 }}>Forgot?</button>
+                    {!signupMode && (
+                      <button className="btn-ghost" style={{ fontSize: 11, color: 'var(--maroon)', fontWeight: 500 }}
+                              onClick={async () => {
+                                if (!email) { setAuthErr('Enter your email above first.'); return; }
+                                try {
+                                  await window.AuthService.resetPassword(email);
+                                  setSignupNote('Password reset email sent. Check your inbox.');
+                                  setAuthErr('');
+                                } catch (e) { setAuthErr(e.message); }
+                              }}>Forgot?</button>
+                    )}
                   </div>
                   <input value={pwd} onChange={e => setPwd(e.target.value)} type="password" placeholder="••••••••" style={{ width: '100%' }} />
                 </div>
-                <button className="btn btn-primary" style={{ justifyContent: 'center', marginTop: 6 }} onClick={() => onSignIn(PEOPLE[0])}>
-                  Sign in
+                <button className="btn btn-primary" style={{ justifyContent: 'center', marginTop: 6 }}
+                        disabled={authBusy || !email || !pwd || !window.AuthService}
+                        onClick={async () => {
+                          setAuthErr(''); setSignupNote(''); setAuthBusy(true);
+                          try {
+                            if (signupMode) {
+                              await window.AuthService.signUp(email, pwd);
+                              setSignupNote('Account created. Check your email to confirm, then sign in.');
+                              setSignupMode(false);
+                            } else {
+                              await window.AuthService.signIn(email, pwd);
+                              // AuthService.onChange will fire; App reacts to session
+                              onClose();
+                            }
+                          } catch (e) { setAuthErr(e.message || 'Authentication failed'); }
+                          finally { setAuthBusy(false); }
+                        }}>
+                  {authBusy ? '…' : (signupMode ? 'Create account' : 'Sign in')}
                 </button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--muted)', fontSize: 11, margin: '10px 0' }}>
+                <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center' }}>
+                  {signupMode ? 'Already have an account? ' : "Don't have an account yet? "}
+                  <button className="btn-ghost" style={{ color: 'var(--maroon)', fontWeight: 500, fontSize: 11 }}
+                          onClick={() => { setSignupMode(!signupMode); setAuthErr(''); setSignupNote(''); }}>
+                    {signupMode ? 'Sign in' : 'Create one'}
+                  </button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--muted)', fontSize: 11, margin: '6px 0' }}>
                   <div style={{ flex: 1, height: 1, background: 'var(--border)' }} /> OR <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
                 </div>
-                <button className="btn" style={{ justifyContent: 'center' }}>
-                  <Icon name="user" size={14} /> Sign in with McMaster / HHS SSO
-                </button>
-                <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', marginTop: 4 }}>
-                  Or <button className="btn-ghost" style={{ color: 'var(--maroon)', fontWeight: 500, fontSize: 11 }} onClick={() => setMode('demo')}>choose a demo account</button>
+                <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center' }}>
+                  Just browsing? <button className="btn-ghost" style={{ color: 'var(--maroon)', fontWeight: 500, fontSize: 11 }} onClick={() => setMode('demo')}>Use a demo account</button>
                 </div>
               </div>
             ) : (

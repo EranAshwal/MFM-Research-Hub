@@ -33,6 +33,26 @@ function App() {
     document.documentElement.dataset.density = t.density;
   }, [t.theme, t.shell, t.density]);
 
+  // Restore real Supabase session on mount + subscribe to auth changes
+  useEffect(() => {
+    if (!window.AuthService) return;
+    const person = window.AuthService.getCurrentPerson();
+    if (person) {
+      setCurrentUser(person);
+      setRoute({ page: 'dashboard' });
+    }
+    const off = window.AuthService.onChange((session, person) => {
+      if (person) {
+        setCurrentUser(person);
+        if (!session || route.page === 'landing') setRoute({ page: 'dashboard' });
+      } else {
+        setCurrentUser(null);
+        setRoute({ page: 'landing' });
+      }
+    });
+    return off;
+  }, []);
+
   // Navigate
   const navigate = (next) => {
     if (next.page !== 'landing' && !currentUser && next.page !== 'login') {
@@ -60,7 +80,10 @@ function App() {
     toast(`Welcome back, ${user.name.split(' ')[0]}`);
   };
 
-  const onSignOut = () => {
+  const onSignOut = async () => {
+    if (window.AuthService) {
+      await window.AuthService.signOut();
+    }
     setCurrentUser(null);
     setRoute({ page: 'landing' });
   };

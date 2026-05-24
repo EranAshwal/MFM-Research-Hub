@@ -103,6 +103,12 @@
     const ms = Math.round(performance.now() - startTime);
     console.log(`[Supabase] Loaded ${people.length} people + ${projects.length} projects in ${ms}ms`);
 
+    // Initialize auth service (Phase 5)
+    if (window.AuthService) {
+      await window.AuthService.init();
+      console.log('[Supabase] Auth initialized', window.AuthService.getSession() ? '(signed in)' : '(no session)');
+    }
+
     // Now mount the app
     window.mountApp?.();
   } catch (err) {
