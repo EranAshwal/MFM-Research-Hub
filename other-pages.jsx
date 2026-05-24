@@ -375,7 +375,11 @@ const PeoplePage = ({ navigate, route, toast }) => {
           <p className="page-sub">{PEOPLE.length} members across the research group</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn"><Icon name="upload" size={14} /> Invite</button>
+          {window.AuthService?.isAdmin?.() && (
+            <button className="btn" onClick={() => navigate({ page: 'users' })}>
+              <Icon name="upload" size={14} /> Invite
+            </button>
+          )}
           <button className="btn btn-primary" onClick={() => setAdding(true)}><Icon name="plus" size={14} stroke={2} /> Add person</button>
         </div>
       </div>
