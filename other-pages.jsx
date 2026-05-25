@@ -223,6 +223,7 @@ const ProfileCV = ({ user }) => {
 };
 
 const PeoplePage = ({ navigate, route, toast }) => {
+  const isAdmin = !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
   const [roleF, setRoleF] = useState('');
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(null); // person being edited
@@ -268,10 +269,12 @@ const PeoplePage = ({ navigate, route, toast }) => {
             <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid var(--hairline)' }}>
               <div className="row between" style={{ marginBottom: 6 }}>
                 <div className="eyebrow">About</div>
-                <button className="btn-ghost" style={{ fontSize: 11, color: 'var(--maroon)', fontWeight: 500 }}
-                        onClick={() => setEditing(selected)}>
-                  <Icon name="pencil" size={11} /> Edit
-                </button>
+                {isAdmin && (
+                  <button className="btn-ghost" style={{ fontSize: 11, color: 'var(--maroon)', fontWeight: 500 }}
+                          onClick={() => setEditing(selected)}>
+                    <Icon name="pencil" size={11} /> Edit
+                  </button>
+                )}
               </div>
               {selected.bio ? (
                 <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--ink-2)' }}>{selected.bio}</p>
@@ -289,13 +292,21 @@ const PeoplePage = ({ navigate, route, toast }) => {
             </div>
 
             <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid var(--hairline)', display: 'flex', gap: 6 }}>
-              <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setEditing(selected)}>
-                <Icon name="pencil" size={12} /> Edit
-              </button>
-              <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center', color: 'var(--status-red)' }}
-                      onClick={() => setDeleting(selected)}>
-                <Icon name="close" size={12} /> Delete
-              </button>
+              {isAdmin ? (
+                <>
+                  <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setEditing(selected)}>
+                    <Icon name="pencil" size={12} /> Edit
+                  </button>
+                  <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center', color: 'var(--status-red)' }}
+                          onClick={() => setDeleting(selected)}>
+                    <Icon name="close" size={12} /> Delete
+                  </button>
+                </>
+              ) : (
+                <a className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }} href={`mailto:${selected.email}`}>
+                  <Icon name="mail" size={12} /> Email
+                </a>
+              )}
             </div>
           </div>
 
@@ -375,12 +386,12 @@ const PeoplePage = ({ navigate, route, toast }) => {
           <p className="page-sub">{PEOPLE.length} members across the research group</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {window.AuthService?.isAdmin?.() && (
+          {isAdmin && (
             <button className="btn" onClick={() => navigate({ page: 'users' })}>
               <Icon name="upload" size={14} /> Invite
             </button>
           )}
-          <button className="btn btn-primary" onClick={() => setAdding(true)}><Icon name="plus" size={14} stroke={2} /> Add person</button>
+          {isAdmin && <button className="btn btn-primary" onClick={() => setAdding(true)}><Icon name="plus" size={14} stroke={2} /> Add person</button>}
         </div>
       </div>
       <div className="card card-pad" style={{ marginBottom: 18 }}>

@@ -5,6 +5,7 @@ const ReportModal = ({ open, onClose, type, project, toast }) => {
 
   const [exporting, setExporting] = useState(false);
   const [format, setFormat] = useState('pdf');
+  const [recipients, setRecipients] = useState('');
   const [includeSections, setIncludeSections] = useState({
     summary: true, milestones: true, tasks: true, updates: true, files: true, activity: false
   });
@@ -25,11 +26,102 @@ const ReportModal = ({ open, onClose, type, project, toast }) => {
 
   const doExport = () => {
     setExporting(true);
-    setTimeout(() => {
-      setExporting(false);
-      onClose();
-      toast(`${reportTitle} exported as ${format.toUpperCase()}`);
-    }, 900);
+    try {
+      // Find the rendered report DOM and snapshot it
+      const reportEl = document.getElementById('mfm-report-body');
+      if (!reportEl) throw new Error('Report preview not ready');
+      const inlineCSS = `
+        body { font-family: 'Inter', system-ui, sans-serif; background: #f6f4ef; color: #1a1d23; margin: 0; padding: 40px 0; }
+        .report-paper { background: #fff; max-width: 720px; margin: 0 auto; padding: 40px; box-shadow: 0 4px 16px rgba(0,0,0,0.08); border-radius: 4px; font-size: 13px; line-height: 1.65; }
+        h1 { font-family: Georgia, serif; font-size: 26px; font-weight: 600; margin: 6px 0 8px; line-height: 1.2; color: #1a1d23; }
+        .eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #7A003C; margin-bottom: 6px; }
+        section { margin-bottom: 22px; }
+        section .eyebrow { color: #6b7280; }
+        ul { padding-left: 18px; margin-top: 6px; }
+        li { margin-bottom: 4px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+        th, td { padding: 6px 4px; text-align: left; border-bottom: 1px solid #eee; }
+        th { font-weight: 600; color: #6b7280; }
+        .footer { margin-top: 36px; padding-top: 16px; border-top: 1px solid #ddd; display: flex; justify-content: space-between; font-size: 10px; color: #888; }
+        .header { padding-bottom: 20px; border-bottom: 4px solid #7A003C; }
+        .meta { font-size: 12px; color: #6b7280; margin-top: 8px; }
+        @media print { body { background: white; padding: 0; } .report-paper { box-shadow: none; max-width: none; padding: 0.6in; } }
+      `;
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title>${reportTitle}</title><style>${inlineCSS}</style></head><body><div class="report-paper">${reportEl.innerHTML}</div></body></html>`;
+
+      const fileBase = `${(project?.acronym || 'portfolio')}-${type}-${new Date().toISOString().slice(0,10)}`;
+
+      if (format === 'pdf') {
+        // Open a new window with print-ready report; user uses browser's Save-as-PDF
+        const win = window.open('', '_blank');
+        if (!win) throw new Error('Pop-up blocked. Allow pop-ups for mfmhub.ca and try again.');
+        win.document.write(html);
+        win.document.close();
+        setTimeout(() => { try { win.print(); } catch {} }, 500);
+        toast(`Report opened — use your browser's "Save as PDF" in the print dialog`);
+      } else if (format === 'docx') {
+        // Word can open HTML files saved as .doc — simplest cross-platform path
+        const blob = new Blob([html], { type: 'application/msword' });
+        downloadBlob(blob, `${fileBase}.doc`);
+        toast('Report downloaded — open in Word');
+      } else if (format === 'md') {
+        const md = htmlToMarkdown(reportEl);
+        const blob = new Blob([md], { type: 'text/markdown' });
+        downloadBlob(blob, `${fileBase}.md`);
+        toast('Markdown downloaded');
+      }
+
+      // If recipients are listed, open a mailto: with the report summary
+      if (recipients.trim()) {
+        const subject = encodeURIComponent(`${reportTitle} — ${project?.acronym || 'MFM Portfolio'} — ${new Date().toLocaleDateString()}`);
+        const body = encodeURIComponent(
+          `Hi,\n\nPlease find attached the ${reportTitle.toLowerCase()} for ${project?.title || 'the MFM research portfolio'}.\n\n` +
+          `The full file was just downloaded to my computer — I'll attach it to this email before sending.\n\n` +
+          `Generated from the MFM Research Hub.\n\nBest,\nDr. Eran Ashwal`
+        );
+        window.location.href = `mailto:${recipients.trim()}?subject=${subject}&body=${body}`;
+      }
+    } catch (err) {
+      toast(`Export failed: ${err.message}`, 'error');
+    }
+    setExporting(false);
+  };
+
+  // Helpers
+  const downloadBlob = (blob, name) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+  };
+
+  const htmlToMarkdown = (el) => {
+    // Cheap-and-cheerful HTML → MD converter for our limited report shapes
+    let md = '';
+    el.querySelectorAll(':scope > section, :scope > div').forEach(s => {
+      const eyebrow = s.querySelector('.eyebrow');
+      if (eyebrow) md += `\n## ${eyebrow.textContent}\n\n`;
+      s.querySelectorAll('p').forEach(p => { md += `${p.textContent.trim()}\n\n`; });
+      s.querySelectorAll('ul li').forEach(li => { md += `- ${li.textContent.trim()}\n`; });
+      const table = s.querySelector('table');
+      if (table) {
+        const headers = [...table.querySelectorAll('thead th')].map(t => t.textContent.trim());
+        if (headers.length) {
+          md += `\n| ${headers.join(' | ')} |\n| ${headers.map(()=>'---').join(' | ')} |\n`;
+          [...table.querySelectorAll('tbody tr')].forEach(tr => {
+            const cells = [...tr.querySelectorAll('td')].map(c => c.textContent.trim());
+            md += `| ${cells.join(' | ')} |\n`;
+          });
+          md += '\n';
+        }
+      }
+    });
+    return `# ${reportTitle}\n\n_${new Date().toLocaleDateString()}_\n\n${md}`;
+  };
+
+  const copyShareLink = async () => {
+    try { await navigator.clipboard.writeText(window.location.href); toast('Page link copied'); }
+    catch { toast('Could not copy — copy URL manually', 'error'); }
   };
 
   return (
@@ -78,9 +170,10 @@ const ReportModal = ({ open, onClose, type, project, toast }) => {
             </div>
 
             <div className="divider" />
-            <div className="eyebrow" style={{ marginBottom: 8 }}>Recipients</div>
-            <input placeholder="Add email addresses…" style={{ width: '100%', fontSize: 12 }} />
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Or copy a shareable link after export.</div>
+            <div className="eyebrow" style={{ marginBottom: 8 }}>Email to (optional)</div>
+            <input value={recipients} onChange={e => setRecipients(e.target.value)}
+                   placeholder="address1@…, address2@…" style={{ width: '100%', fontSize: 12 }} />
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Opens your email app pre-filled. Attach the downloaded file before sending.</div>
 
             <div className="divider" />
             <div style={{ fontSize: 11, color: 'var(--muted)' }}>
@@ -90,7 +183,7 @@ const ReportModal = ({ open, onClose, type, project, toast }) => {
 
           {/* Preview */}
           <div style={{ overflow: 'auto', background: 'var(--bg-elevated)', padding: 24 }}>
-            <div style={{ background: 'var(--paper)', maxWidth: 720, margin: '0 auto', boxShadow: 'var(--shadow-2)', borderRadius: 4 }}>
+            <div id="mfm-report-body" style={{ background: 'var(--paper)', maxWidth: 720, margin: '0 auto', boxShadow: 'var(--shadow-2)', borderRadius: 4 }}>
               {/* Cover */}
               <div style={{ padding: '36px 40px 28px', borderBottom: '4px solid var(--maroon)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20 }}>
@@ -242,14 +335,18 @@ const ReportModal = ({ open, onClose, type, project, toast }) => {
 
         <div className="modal-f">
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn" onClick={() => toast('Link copied to clipboard')}>
-            <Icon name="paperclip" size={14} /> Copy share link
+          <button className="btn" onClick={copyShareLink}>
+            <Icon name="link" size={14} /> Copy page link
           </button>
           <button className="btn btn-primary" onClick={doExport} disabled={exporting}>
             {exporting ? (
               <><span className="skel" style={{ width: 14, height: 14, borderRadius: '50%' }} /> Generating…</>
             ) : (
-              <><Icon name="download" size={14} /> Export as {format.toUpperCase()}</>
+              <>
+                {format === 'pdf' && <><Icon name="download" size={14} /> {recipients ? 'Download + email' : 'Download as PDF'}</>}
+                {format === 'docx' && <><Icon name="download" size={14} /> {recipients ? 'Download + email' : 'Download as Word'}</>}
+                {format === 'md' && <><Icon name="download" size={14} /> {recipients ? 'Download + email' : 'Download as Markdown'}</>}
+              </>
             )}
           </button>
         </div>
