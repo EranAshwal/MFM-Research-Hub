@@ -430,8 +430,111 @@ const RequestUpdateModal = ({ project, onClose, toast, currentUser }) => {
 };
 
 // =========================================================================
-// Export
+// ADD / EDIT MILESTONE
 // =========================================================================
+const MilestoneModal = ({ project, milestone, onClose, toast, onSaved }) => {
+  const isEdit = !!milestone;
+  const [title, setTitle] = useState(milestone?.title || '');
+  const [ownerId, setOwnerId] = useState(milestone?.owner || project.lead || '');
+  const [dueDate, setDueDate] = useState(milestone?.due || '');
+  const [status, setStatus] = useState(milestone?.status || 'todo');
+  const [notes, setNotes] = useState(milestone?.notes || '');
+  const [saving, setSaving] = useState(false);
+
+  const teamIds = new Set([project.pi, project.lead, ...(project.members || [])].filter(Boolean));
+  const teamPeople = Array.from(teamIds).map(id => personById(id)).filter(Boolean);
+
+  const save = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      if (isEdit) {
+        await window.DataService.updateMilestone(milestone.id, { title, ownerId, dueDate, status, notes });
+        toast?.('Milestone updated');
+      } else {
+        await window.DataService.createMilestone({ projectId: project.id, title, ownerId, dueDate, status, notes });
+        toast?.('Milestone added');
+      }
+      onSaved?.();
+      onClose();
+    } catch (err) {
+      toast?.('Failed: ' + err.message, 'error');
+    }
+    setSaving(false);
+  };
+
+  const del = async () => {
+    if (!confirm(`Delete milestone "${milestone.title}"?`)) return;
+    setSaving(true);
+    try {
+      await window.DataService.deleteMilestone(milestone.id);
+      toast?.('Milestone deleted');
+      onSaved?.();
+      onClose();
+    } catch (err) {
+      toast?.('Delete failed: ' + err.message, 'error');
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <form className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()} onSubmit={save}>
+        <div className="modal-h">
+          <div>
+            <div className="serif" style={{ fontSize: 18, fontWeight: 600 }}>{isEdit ? 'Edit milestone' : 'Add milestone'}</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{project.acronym}</div>
+          </div>
+          <button type="button" className="btn-icon btn-ghost" onClick={onClose}><Icon name="close" size={16} /></button>
+        </div>
+        <div className="modal-b" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <Field label="Title">
+            <input value={title} onChange={e => setTitle(e.target.value)} required autoFocus
+                   placeholder="e.g. Data extraction complete" style={{ width: '100%' }} />
+          </Field>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Owner">
+              <select value={ownerId} onChange={e => setOwnerId(e.target.value)} style={{ width: '100%' }}>
+                <option value="">— Unassigned —</option>
+                {teamPeople.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Due date">
+              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} style={{ width: '100%' }} />
+            </Field>
+          </div>
+          <Field label="Status">
+            <select value={status} onChange={e => setStatus(e.target.value)} style={{ width: '100%' }}>
+              <option value="todo">Not started</option>
+              <option value="in_progress">In progress</option>
+              <option value="done">Done</option>
+              <option value="overdue">Overdue</option>
+            </select>
+          </Field>
+          <Field label="Notes (optional)">
+            <textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} style={{ width: '100%', resize: 'vertical' }} />
+          </Field>
+        </div>
+        <div className="modal-f" style={{ justifyContent: 'space-between' }}>
+          <div>
+            {isEdit && (
+              <button type="button" className="btn btn-ghost" style={{ color: 'var(--status-red)' }} onClick={del} disabled={saving}>
+                <Icon name="trash" size={13} /> Delete
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={saving || !title}>
+              {saving ? 'Saving…' : (isEdit ? 'Save' : 'Add milestone')}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+window.MilestoneModal = MilestoneModal;
 Object.assign(window, {
   EditProjectModal, ChangeStatusModal, AddCommentModal,
   UploadFileModal, GenerateSummaryModal, RequestUpdateModal,

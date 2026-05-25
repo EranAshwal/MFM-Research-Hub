@@ -7,11 +7,12 @@ const sb = () => window.__sb;
 
 // Refresh data from Supabase after a mutation
 const refreshAll = async () => {
-  const [peopleRes, projectsRes, membersRes, pubsRes] = await Promise.all([
+  const [peopleRes, projectsRes, membersRes, pubsRes, milestonesRes] = await Promise.all([
     sb().from('people').select('*').order('joined', { ascending: true }),
     sb().from('projects').select('*').order('start_date', { ascending: true }),
     sb().from('project_members').select('*'),
     sb().from('publications').select('*').order('year', { ascending: false }),
+    sb().from('milestones').select('*').order('due_date', { ascending: true }),
   ]);
 
   if (peopleRes.data) {
@@ -50,6 +51,19 @@ const refreshAll = async () => {
     window.PUBLICATIONS.length = 0; publications.forEach(p => window.PUBLICATIONS.push(p));
     // Notify subscribers
     window.__pubChangeListeners?.forEach(cb => { try { cb(); } catch (e) {} });
+  }
+  if (milestonesRes && milestonesRes.data) {
+    Object.keys(window.MILESTONES).forEach(k => delete window.MILESTONES[k]);
+    milestonesRes.data.forEach(m => {
+      const mapped = {
+        id: m.id, projectId: m.project_id, title: m.title,
+        owner: m.owner_id, due: m.due_date, status: m.status,
+        completed: m.completed_at ? m.completed_at.slice(0, 10) : null,
+        notes: m.notes, displayOrder: m.display_order,
+      };
+      if (!window.MILESTONES[m.project_id]) window.MILESTONES[m.project_id] = [];
+      window.MILESTONES[m.project_id].push(mapped);
+    });
   }
 };
 
@@ -172,6 +186,39 @@ window.DataService = {
       project_id: projectId, user_id: userId,
       action_type: actionType, text, detail,
     });
+  },
+
+  // ============= MILESTONES =============
+  async createMilestone({ projectId, title, ownerId, dueDate, status = 'todo', notes }) {
+    if (!title) throw new Error('Title is required');
+    const { data, error } = await sb().from('milestones').insert({
+      project_id: projectId, title, owner_id: ownerId || null,
+      due_date: dueDate || null, status, notes: notes || null,
+    }).select().single();
+    if (error) throw error;
+    await refreshAll();
+    return data;
+  },
+
+  async updateMilestone(id, patch) {
+    const row = {};
+    if ('title'   in patch) row.title    = patch.title;
+    if ('ownerId' in patch) row.owner_id = patch.ownerId || null;
+    if ('dueDate' in patch) row.due_date = patch.dueDate || null;
+    if ('status'  in patch) {
+      row.status = patch.status;
+      row.completed_at = patch.status === 'done' ? new Date().toISOString() : null;
+    }
+    if ('notes'   in patch) row.notes    = patch.notes || null;
+    const { error } = await sb().from('milestones').update(row).eq('id', id);
+    if (error) throw error;
+    await refreshAll();
+  },
+
+  async deleteMilestone(id) {
+    const { error } = await sb().from('milestones').delete().eq('id', id);
+    if (error) throw error;
+    await refreshAll();
   },
 
   // ============= PUBLICATIONS =============

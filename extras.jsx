@@ -4,7 +4,179 @@
    INBOX — everything awaiting the PI's decision
    ============================================================ */
 
-const InboxPage = ({ navigate, updates, toast, openReply }) => {
+// Personal inbox shown to non-admin users (trainees, collaborators)
+const PersonalInboxPage = ({ navigate, toast, currentUser }) => {
+  const [notes, setNotes] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadNotes = async () => {
+    if (!currentUser) return;
+    try {
+      const data = await window.DataService.listNotesFor(currentUser.id);
+      setNotes((data || []).filter(n => n.recipient_id === currentUser.id));
+    } catch (e) { /* silent */ }
+    setLoading(false);
+  };
+  useEffect(() => { loadNotes(); }, [currentUser?.id]);
+
+  const markRead = async (n) => {
+    if (n.read_at) return;
+    try { await window.DataService.markNoteRead(n.id); loadNotes(); } catch {}
+  };
+
+  // Projects this person is on
+  const myProjects = PROJECTS.filter(p =>
+    p.lead === currentUser?.id || p.pi === currentUser?.id || (p.members || []).includes(currentUser?.id)
+  );
+
+  // Pending update requests for me: notes with template = 'progress-request' that are unread
+  const updateRequests = notes.filter(n => n.template === 'progress-request' && !n.read_at);
+  const otherNotes = notes.filter(n => n.template !== 'progress-request');
+
+  // My overdue milestones
+  const myOverdue = [];
+  Object.keys(MILESTONES).forEach(pid => {
+    (MILESTONES[pid] || []).forEach(m => {
+      if (m.status !== 'done' && m.owner === currentUser?.id) {
+        const proj = PROJECTS.find(p => p.id === pid);
+        if (proj && new Date(m.due) < new Date()) myOverdue.push({ ...m, project: proj });
+      }
+    });
+  });
+
+  const total = updateRequests.length + otherNotes.filter(n => !n.read_at).length + myOverdue.length;
+
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h1 className="page-title">Inbox</h1>
+          {total > 0 && <span className="chip chip-maroon" style={{ fontSize: 12, padding: '3px 10px' }}>{total} awaiting you</span>}
+        </div>
+        <p className="page-sub">Things that need your attention — messages from the PI, requests, and your overdue milestones.</p>
+      </div>
+
+      {loading && <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--muted)' }}>Loading…</div>}
+
+      {!loading && total === 0 && (
+        <div className="card card-pad" style={{ textAlign: 'center', padding: 56 }}>
+          <div style={{ width: 64, height: 64, margin: '0 auto', borderRadius: 16, background: 'var(--status-green-wash)', color: 'var(--status-green)', display: 'grid', placeItems: 'center' }}>
+            <Icon name="check" size={28} stroke={2.5} />
+          </div>
+          <div className="serif" style={{ fontSize: 22, fontWeight: 600, marginTop: 14 }}>All caught up.</div>
+          <p style={{ color: 'var(--muted)', marginTop: 6 }}>
+            No new messages or pending requests. Check your projects below.
+          </p>
+        </div>
+      )}
+
+      {updateRequests.length > 0 && (
+        <div style={{ marginBottom: 22 }}>
+          <div className="row" style={{ gap: 10, marginBottom: 10, alignItems: 'center' }}>
+            <h3 style={{ fontFamily: 'var(--ff-serif)', fontSize: 16, fontWeight: 600 }}>Progress updates requested</h3>
+            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'var(--maroon)', color: '#F8EEE2', fontWeight: 600 }}>{updateRequests.length}</span>
+          </div>
+          {updateRequests.map(n => {
+            const project = n.project_id ? PROJECTS.find(p => p.id === n.project_id) : null;
+            return (
+              <div key={n.id} className="card" style={{ padding: 16, marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'flex-start' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+                    <strong style={{ fontSize: 13 }}>{personById(n.sender_id)?.name || 'Admin'}</strong>
+                    {project && <span className="chip chip-maroon" style={{ fontSize: 10 }}>{project.acronym}</span>}
+                  </div>
+                  <div style={{ fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap', color: 'var(--ink-2)' }}>{n.body}</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>{new Date(n.sent_at).toLocaleString()}</div>
+                </div>
+                {project && (
+                  <button className="btn btn-sm btn-primary" onClick={() => { markRead(n); navigate({ page: 'projects', id: project.id, tab: 'updates' }); }}>
+                    Submit update
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {myOverdue.length > 0 && (
+        <div style={{ marginBottom: 22 }}>
+          <div className="row" style={{ gap: 10, marginBottom: 10, alignItems: 'center' }}>
+            <h3 style={{ fontFamily: 'var(--ff-serif)', fontSize: 16, fontWeight: 600 }}>Your overdue milestones</h3>
+            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'var(--status-red)', color: '#fff', fontWeight: 600 }}>{myOverdue.length}</span>
+          </div>
+          {myOverdue.map(m => (
+            <div key={m.id} className="card" style={{ padding: 14, marginBottom: 8, cursor: 'pointer' }}
+                 onClick={() => navigate({ page: 'projects', id: m.project.id, tab: 'timeline' })}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div className="serif" style={{ fontSize: 14, fontWeight: 600 }}>{m.title}</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                    {m.project.acronym} · Due {fmtDate(m.due)}
+                  </div>
+                </div>
+                <span className="chip chip-red">Overdue</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {otherNotes.length > 0 && (
+        <div style={{ marginBottom: 22 }}>
+          <div className="row" style={{ gap: 10, marginBottom: 10, alignItems: 'center' }}>
+            <h3 style={{ fontFamily: 'var(--ff-serif)', fontSize: 16, fontWeight: 600 }}>Messages</h3>
+          </div>
+          {otherNotes.map(n => {
+            const project = n.project_id ? PROJECTS.find(p => p.id === n.project_id) : null;
+            const unread = !n.read_at;
+            return (
+              <div key={n.id} onClick={() => markRead(n)} className="card"
+                   style={{ padding: 14, marginBottom: 8, cursor: unread ? 'pointer' : 'default',
+                            background: unread ? 'var(--maroon-wash)' : 'var(--paper)' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4, flexWrap: 'wrap' }}>
+                  <strong style={{ fontSize: 13 }}>{personById(n.sender_id)?.name || 'Admin'}</strong>
+                  {project && <span className="chip chip-grey" style={{ fontSize: 10 }}>{project.acronym}</span>}
+                  {unread && <span className="chip chip-maroon" style={{ fontSize: 10 }}>New</span>}
+                </div>
+                <div style={{ fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap', color: 'var(--ink-2)' }}>{n.body}</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>{new Date(n.sent_at).toLocaleString()}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {myProjects.length > 0 && (
+        <div style={{ marginBottom: 22 }}>
+          <div className="row" style={{ gap: 10, marginBottom: 10, alignItems: 'center' }}>
+            <h3 style={{ fontFamily: 'var(--ff-serif)', fontSize: 16, fontWeight: 600 }}>Your projects</h3>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+            {myProjects.map(p => (
+              <button key={p.id} className="card" style={{ padding: 14, cursor: 'pointer', textAlign: 'left' }}
+                      onClick={() => navigate({ page: 'projects', id: p.id })}>
+                <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>{p.acronym}</div>
+                <div className="serif" style={{ fontSize: 14, fontWeight: 600, marginTop: 4, lineHeight: 1.3 }}>{p.title}</div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                  <span className={`chip ${statusChipClass(p.status)}`}>{p.status}</span>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{p.progress}%</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+window.PersonalInboxPage = PersonalInboxPage;
+
+const InboxPage = ({ navigate, updates, toast, openReply, currentUser }) => {
+  const isAdmin = !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
+  // Non-admin users see a personal inbox scoped to them
+  if (!isAdmin) return <PersonalInboxPage navigate={navigate} toast={toast} currentUser={currentUser} />;
+
   const [filter, setFilter] = useState('all');
 
   // Gather queues

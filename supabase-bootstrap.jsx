@@ -40,18 +40,20 @@
     console.log('[Supabase] Fetching data…');
 
     // Fetch in parallel
-    const [peopleRes, projectsRes, membersRes, pubsRes] = await Promise.all([
+    const [peopleRes, projectsRes, membersRes, pubsRes, milestonesRes] = await Promise.all([
       client.from('people').select('*').order('joined', { ascending: true }),
       client.from('projects').select('*').order('start_date', { ascending: true }),
       client.from('project_members').select('*'),
       client.from('publications').select('*').order('year', { ascending: false }),
+      client.from('milestones').select('*').order('due_date', { ascending: true }),
     ]);
 
     if (peopleRes.error) throw new Error('people: ' + peopleRes.error.message);
     if (projectsRes.error) throw new Error('projects: ' + projectsRes.error.message);
     if (membersRes.error) throw new Error('project_members: ' + membersRes.error.message);
-    // publications table may not exist yet on first deploy — non-fatal
+    // publications + milestones non-fatal
     if (pubsRes.error) console.warn('[Supabase] publications:', pubsRes.error.message);
+    if (milestonesRes.error) console.warn('[Supabase] milestones:', milestonesRes.error.message);
 
     // Map Supabase rows (snake_case) → app format (camelCase)
     const people = peopleRes.data.map(p => ({
@@ -122,6 +124,21 @@
     window.PROJECTS.length = 0; projects.forEach(p => window.PROJECTS.push(p));
     if (publications.length) {
       window.PUBLICATIONS.length = 0; publications.forEach(p => window.PUBLICATIONS.push(p));
+    }
+
+    // Map milestones into the per-project MILESTONES dictionary
+    if (milestonesRes.data) {
+      Object.keys(window.MILESTONES).forEach(k => delete window.MILESTONES[k]);
+      milestonesRes.data.forEach(m => {
+        const mapped = {
+          id: m.id, projectId: m.project_id, title: m.title,
+          owner: m.owner_id, due: m.due_date, status: m.status,
+          completed: m.completed_at ? m.completed_at.slice(0, 10) : null,
+          notes: m.notes, displayOrder: m.display_order,
+        };
+        if (!window.MILESTONES[m.project_id]) window.MILESTONES[m.project_id] = [];
+        window.MILESTONES[m.project_id].push(mapped);
+      });
     }
 
     const ms = Math.round(performance.now() - startTime);

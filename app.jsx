@@ -182,7 +182,7 @@ function App() {
     else pageEl = <div className="page"><h2>Project not found</h2></div>;
   }
   else if (route.page === 'projects') pageEl = <ProjectsRegistry navigate={navigate} search={search} tweaks={t} />;
-  else if (route.page === 'inbox') pageEl = <InboxPage navigate={navigate} updates={updates} toast={toast} openReply={(update, project) => setAiReply({ update, project })} />;
+  else if (route.page === 'inbox') pageEl = <InboxPage navigate={navigate} updates={updates} toast={toast} openReply={(update, project) => setAiReply({ update, project })} currentUser={currentUser} />;
   else if (route.page === 'deadlines') pageEl = <DeadlinesPage navigate={navigate} toast={toast} />;
   else if (route.page === 'tasks') pageEl = <MyTasksPage navigate={navigate} currentUser={currentUser} toast={toast} />;
   else if (route.page === 'updates') pageEl = <TraineeUpdatesPage navigate={navigate} updates={updates} />;

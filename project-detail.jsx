@@ -224,10 +224,19 @@ const TabOverview = ({ project, toast, currentUser }) => {
   );
 };
 
-const TabTimeline = ({ project }) => {
-  const milestones = MILESTONES[project.id] || [
-    { id: 'auto', title: project.nextMilestone, owner: project.lead, due: project.nextDue, status: 'in_progress', completed: null }
-  ];
+const TabTimeline = ({ project, toast }) => {
+  const [, force] = useState(0);
+  const refresh = () => force(n => n + 1);
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const isAdmin = !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
+  const canEdit = isAdmin; // could also allow project members later
+
+  const milestones = (MILESTONES[project.id] && MILESTONES[project.id].length)
+    ? MILESTONES[project.id]
+    : (project.nextMilestone
+        ? [{ id: 'auto', title: project.nextMilestone, owner: project.lead, due: project.nextDue, status: 'in_progress', completed: null }]
+        : []);
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 24 }}>
       <div className="card card-pad">
@@ -236,9 +245,11 @@ const TabTimeline = ({ project }) => {
             <h3 style={{ fontFamily: 'var(--ff-serif)', fontSize: 18, fontWeight: 600 }}>Milestones</h3>
             <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{milestones.filter(m => m.status === 'done').length} of {milestones.length} complete</p>
           </div>
-          <button className="btn btn-sm">
-            <Icon name="plus" size={12} stroke={2} /> Add milestone
-          </button>
+          {canEdit && (
+            <button className="btn btn-sm" onClick={() => setAdding(true)}>
+              <Icon name="plus" size={12} stroke={2} /> Add milestone
+            </button>
+          )}
         </div>
         <div>
           {milestones.map((m, i) => {
@@ -247,7 +258,9 @@ const TabTimeline = ({ project }) => {
             const isCurrent = m.status === 'in_progress';
             const isOverdue = m.status === 'overdue' || (m.status !== 'done' && new Date(m.due) < new Date('2026-05-24'));
             return (
-              <div key={m.id} className="timeline-row">
+              <div key={m.id} className="timeline-row"
+                   onClick={() => canEdit && m.id !== 'auto' && setEditing(m)}
+                   style={{ cursor: canEdit && m.id !== 'auto' ? 'pointer' : 'default' }}>
                 <div className={`timeline-dot ${isDone ? 'done' : isCurrent ? 'current' : ''}`}>
                   {isDone ? <Icon name="check" size={14} stroke={3} /> : isCurrent ? <span style={{ width: 8, height: 8, borderRadius: 50, background: '#fff' }} /> : <span style={{ fontSize: 11, fontWeight: 600 }}>{i + 1}</span>}
                 </div>
@@ -321,6 +334,8 @@ const TabTimeline = ({ project }) => {
           </div>
         </div>
       </div>
+      {adding && <MilestoneModal project={project} toast={toast} onClose={() => setAdding(false)} onSaved={refresh} />}
+      {editing && <MilestoneModal project={project} milestone={editing} toast={toast} onClose={() => setEditing(null)} onSaved={refresh} />}
     </div>
   );
 };
@@ -838,7 +853,7 @@ const ProjectDetail = ({ project, route, navigate, toast, updates, addUpdate, op
       </div>
 
       {tab === 'overview' && <TabOverview project={project} toast={toast} currentUser={window.AuthService?.getCurrentPerson()} />}
-      {tab === 'timeline' && <TabTimeline project={project} />}
+      {tab === 'timeline' && <TabTimeline project={project} toast={toast} />}
       {tab === 'tasks' && <TabTasks project={project} toast={toast} />}
       {tab === 'updates' && <TabUpdates project={project} toast={toast} updates={updates} addUpdate={addUpdate} />}
       {tab === 'files' && <TabFiles project={project} toast={toast} />}
