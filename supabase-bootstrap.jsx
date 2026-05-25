@@ -12,7 +12,7 @@
     return;
   }
 
-  const startTime = performance.now();
+    const startTime = performance.now();
   // sessionStorage = auth session dies when browser/tab closes (per user request).
   const client = window.supabase.createClient(cfg.url, cfg.anonKey, {
     auth: {
@@ -21,8 +21,19 @@
       autoRefreshToken: true,
       detectSessionInUrl: true,
     },
+    realtime: {
+      params: { eventsPerSecond: 10 },
+    },
   });
   window.__sb = client; // expose for ad-hoc debugging in console
+
+  // Bind realtime to current auth session so RLS-protected broadcasts work
+  client.auth.getSession().then(({ data: { session } }) => {
+    if (session) client.realtime.setAuth(session.access_token);
+  });
+  client.auth.onAuthStateChange((_event, sess) => {
+    if (sess) client.realtime.setAuth(sess.access_token);
+  });
 
   const showError = (msg) => {
     const root = document.getElementById('root');
@@ -228,6 +239,23 @@
         console.log('[Realtime] channel status:', status);
       });
     window.__sbChannel = channel;
+
+    // ============== POLLING SAFETY NET ==============
+    // Realtime broadcasts can silently fail (RLS, quotas, network).
+    // Poll every 8 seconds to keep comments/updates/tasks fresh as a backup.
+    let lastPoll = Date.now();
+    const POLL_INTERVAL_MS = 8000;
+    setInterval(async () => {
+      // Skip if tab is hidden — saves quota
+      if (document.hidden) return;
+      // Skip if a refresh happened in the last 4 seconds (e.g. realtime just fired)
+      if (Date.now() - lastPoll < 4000) return;
+      lastPoll = Date.now();
+      try {
+        await window.DataService.refresh();
+        window.dispatchEvent(new CustomEvent('mfm:data-changed', { detail: { table: 'poll' } }));
+      } catch (e) { /* silent */ }
+    }, POLL_INTERVAL_MS);
 
     // Initialize auth service (Phase 5)
     if (window.AuthService) {

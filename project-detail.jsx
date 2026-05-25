@@ -353,7 +353,7 @@ const TabTasks = ({ project, toast }) => {
   const refresh = () => force(n => n + 1);
   useEffect(() => {
     const onChange = (e) => {
-      if (e.detail?.table === 'tasks') refresh();
+      if (e.detail?.table === 'tasks' || e.detail?.table === 'poll') refresh();
     };
     window.addEventListener('mfm:data-changed', onChange);
     return () => window.removeEventListener('mfm:data-changed', onChange);
@@ -551,7 +551,7 @@ const UpdateThread = ({ update, project, toast, currentUser }) => {
   // Listen for live updates from Supabase Realtime
   useEffect(() => {
     const onChange = (e) => {
-      if (e.detail?.table === 'comments') refresh();
+      if (e.detail?.table === 'comments' || e.detail?.table === 'poll') refresh();
     };
     window.addEventListener('mfm:data-changed', onChange);
     return () => window.removeEventListener('mfm:data-changed', onChange);
@@ -625,7 +625,7 @@ const TabUpdates = ({ project, toast, updates, addUpdate, currentUser }) => {
   const [, force] = useState(0);
   useEffect(() => {
     const onChange = (e) => {
-      if (e.detail?.table === 'progress_updates') force(n => n + 1);
+      if (e.detail?.table === 'progress_updates' || e.detail?.table === 'poll') force(n => n + 1);
     };
     window.addEventListener('mfm:data-changed', onChange);
     return () => window.removeEventListener('mfm:data-changed', onChange);

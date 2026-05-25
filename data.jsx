@@ -1463,8 +1463,19 @@ const fmtDate = (iso) => {
 };
 const relDate = (iso) => {
   if (!iso) return '—';
-  const d = new Date(iso);
-  const diff = Math.round((d - today) / (24 * 3600 * 1000));
+  // Parse YYYY-MM-DD as LOCAL midnight (not UTC) — otherwise late-evening Toronto
+  // values get shifted a day in the comparison below.
+  let d;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [y, m, day] = iso.split('-').map(Number);
+    d = new Date(y, m - 1, day);
+  } else {
+    d = new Date(iso);
+  }
+  const todayLocal = new Date();
+  todayLocal.setHours(0, 0, 0, 0);
+  d.setHours(0, 0, 0, 0);
+  const diff = Math.round((d - todayLocal) / (24 * 3600 * 1000));
   if (diff === 0) return 'Today';
   if (diff === 1) return 'Tomorrow';
   if (diff === -1) return 'Yesterday';
