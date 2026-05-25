@@ -229,6 +229,7 @@ const PeoplePage = ({ navigate, route, toast }) => {
   const [editing, setEditing] = useState(null); // person being edited
   const [deleting, setDeleting] = useState(null); // person being deleted
   const [adding, setAdding] = useState(false);
+  const [contacting, setContacting] = useState(null); // person to contact
   const [, forceRender] = useState(0);
   const refresh = () => forceRender(n => n + 1);
 
@@ -291,22 +292,27 @@ const PeoplePage = ({ navigate, route, toast }) => {
               <ProfileCV user={selected} />
             </div>
 
-            <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid var(--hairline)', display: 'flex', gap: 6 }}>
-              {isAdmin ? (
-                <>
-                  <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setEditing(selected)}>
-                    <Icon name="pencil" size={12} /> Edit
-                  </button>
-                  <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center', color: 'var(--status-red)' }}
-                          onClick={() => setDeleting(selected)}>
-                    <Icon name="close" size={12} /> Delete
-                  </button>
-                </>
-              ) : (
-                <a className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }} href={`mailto:${selected.email}`}>
-                  <Icon name="mail" size={12} /> Email
-                </a>
-              )}
+            <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid var(--hairline)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <button className="btn btn-primary btn-sm" style={{ justifyContent: 'center' }} onClick={() => setContacting(selected)}>
+                <Icon name="message" size={12} stroke={2} /> Contact {selected.name.split(' ')[0]}
+              </button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {isAdmin ? (
+                  <>
+                    <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setEditing(selected)}>
+                      <Icon name="pencil" size={12} /> Edit
+                    </button>
+                    <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center', color: 'var(--status-red)' }}
+                            onClick={() => setDeleting(selected)}>
+                      <Icon name="close" size={12} /> Delete
+                    </button>
+                  </>
+                ) : (
+                  <a className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }} href={`mailto:${selected.email}`}>
+                    <Icon name="mail" size={12} /> Email directly
+                  </a>
+                )}
+              </div>
             </div>
           </div>
 
@@ -372,6 +378,7 @@ const PeoplePage = ({ navigate, route, toast }) => {
       </div>
       {editing && <EditPersonModal user={editing} onClose={() => setEditing(null)} onSaved={refresh} />}
       {deleting && <DeletePersonConfirm user={deleting} onClose={() => setDeleting(null)} onConfirm={() => { navigate({ page: 'people' }); }} />}
+      {contacting && <ContactComposer recipient={contacting} onClose={() => setContacting(null)} toast={toast} />}
       </>
     );
   }
@@ -643,6 +650,155 @@ const NewEventModal = ({ date, onClose, onSave }) => {
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
           <button type="submit" className="btn btn-primary" disabled={!form.title.trim()}>
             <Icon name="plus" size={14} stroke={2} /> Add to calendar
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+const ContactComposer = ({ recipient, fromUser, onClose, toast }) => {
+  // Single composer with three modes: question, meeting, urgent
+  const [mode, setMode] = useState('question');
+  const [form, setForm] = useState({
+    subject: '',
+    body: '',
+    projectId: '',
+    date: new Date().toISOString().slice(0, 10),
+    time: '09:00',
+  });
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const MODES = [
+    { key: 'question', label: 'Ask a question', icon: 'message', color: 'var(--bayfront, #0D5D78)', help: 'Posts a comment on the relevant project and notifies ' + (recipient?.name?.split(' ')[0] || 'them') + '. Use for things that can wait a day or two.' },
+    { key: 'meeting', label: 'Request meeting', icon: 'calendar', color: 'var(--maroon)', help: 'Proposes a calendar slot. ' + (recipient?.name?.split(' ')[0] || 'They') + ' can accept, decline, or counter-propose.' },
+    { key: 'urgent', label: 'Send urgent', icon: 'alert', color: 'var(--status-red)', help: 'Routes via Slack/email (per integrations in Settings). Use sparingly — for things that need a reply today.' },
+  ];
+  const current = MODES.find(m => m.key === mode);
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (!form.subject.trim()) return;
+
+    if (mode === 'meeting') {
+      // Drop into the shared user-events bucket so the Calendar picks it up
+      try {
+        const existing = JSON.parse(localStorage.getItem('mfm_user_events') || '[]');
+        existing.push({
+          id: 'ue_' + Date.now(),
+          date: form.date,
+          time: form.time,
+          type: 'meeting',
+          title: `${form.subject} (with ${recipient?.name?.split(' ')[0] || recipient?.name || 'team'})`,
+          projectId: form.projectId,
+          notes: form.body,
+          status: 'pending',
+          requestedBy: fromUser || null,
+        });
+        localStorage.setItem('mfm_user_events', JSON.stringify(existing));
+      } catch {}
+      toast?.(`Meeting request sent to ${recipient?.name?.split(' ')[0] || 'them'}`);
+    } else if (mode === 'urgent') {
+      toast?.(`Urgent message routed to ${recipient?.name?.split(' ')[0] || 'them'} via Slack & email`);
+    } else {
+      toast?.(`Question posted${form.projectId ? ' on project' : ''} — ${recipient?.name?.split(' ')[0] || 'they'} will be notified`);
+    }
+    onClose();
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <form className="modal" style={{ maxWidth: 580 }} onClick={e => e.stopPropagation()} onSubmit={submit}>
+        <div className="modal-h">
+          <div>
+            <div className="serif" style={{ fontSize: 20, fontWeight: 600 }}>Contact {recipient?.name?.split(' ')[0] || 'team member'}</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{recipient?.role}{recipient?.training ? ' · ' + recipient.training : ''}</div>
+          </div>
+          <button type="button" className="btn-icon btn-ghost" onClick={onClose}><Icon name="close" size={16} /></button>
+        </div>
+        <div className="modal-b" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Mode picker — 3 cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+            {MODES.map(m => (
+              <button key={m.key} type="button" onClick={() => setMode(m.key)}
+                style={{
+                  padding: '12px 10px',
+                  borderRadius: 8,
+                  border: '1px solid',
+                  borderColor: mode === m.key ? m.color : 'var(--hairline)',
+                  background: mode === m.key ? 'var(--paper)' : 'var(--bg-elevated)',
+                  boxShadow: mode === m.key ? '0 0 0 3px ' + m.color + '22' : 'none',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  display: 'flex', flexDirection: 'column', gap: 6,
+                }}>
+                <div style={{ width: 28, height: 28, borderRadius: 6, background: m.color + '18', color: m.color, display: 'grid', placeItems: 'center' }}>
+                  <Icon name={m.icon} size={14} stroke={2} />
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: mode === m.key ? 'var(--ink)' : 'var(--ink-2)' }}>{m.label}</div>
+              </button>
+            ))}
+          </div>
+
+          <div style={{ fontSize: 11, color: 'var(--muted)', padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 6, lineHeight: 1.5 }}>
+            {current.help}
+          </div>
+
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>
+              {mode === 'meeting' ? 'Meeting topic' : 'Subject'}
+            </div>
+            <input autoFocus value={form.subject} onChange={e => set('subject', e.target.value)}
+                   placeholder={
+                     mode === 'meeting' ? 'e.g. PERIPATUM analysis review'
+                     : mode === 'urgent' ? 'e.g. Recruitment site issue — need decision today'
+                     : 'e.g. Question about exclusion criteria'
+                   }
+                   style={{ width: '100%' }} />
+          </div>
+
+          {mode === 'meeting' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Proposed date</div>
+                <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={{ width: '100%' }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Time</div>
+                <input type="time" value={form.time} onChange={e => set('time', e.target.value)} style={{ width: '100%' }} />
+              </div>
+            </div>
+          )}
+
+          {(mode === 'question' || mode === 'meeting') && (
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Project context (optional)</div>
+              <select value={form.projectId} onChange={e => set('projectId', e.target.value)} style={{ width: '100%' }}>
+                <option value="">— Not specific to one project —</option>
+                {PROJECTS.map(p => <option key={p.id} value={p.id}>{p.acronym} · {p.title}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>
+              {mode === 'meeting' ? 'Agenda / what to prepare' : 'Message'}
+            </div>
+            <textarea value={form.body} onChange={e => set('body', e.target.value)} rows={4}
+                      placeholder={
+                        mode === 'meeting' ? 'What should we cover? Anything to read ahead of time?'
+                        : mode === 'urgent' ? 'Be specific — what decision is needed and by when?'
+                        : 'Add detail. Code snippets, screenshots, or file links welcome.'
+                      }
+                      style={{ width: '100%', resize: 'vertical' }} />
+          </div>
+        </div>
+        <div className="modal-f">
+          <button type="button" className="btn" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={!form.subject.trim()}
+                  style={ mode === 'urgent' ? { background: 'var(--status-red)', borderColor: 'var(--status-red)' } : {} }>
+            <Icon name={current.icon} size={14} stroke={2} />
+            {mode === 'meeting' ? 'Send meeting request' : mode === 'urgent' ? 'Send urgent' : 'Send question'}
           </button>
         </div>
       </form>
