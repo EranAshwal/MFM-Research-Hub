@@ -17,7 +17,13 @@ const Select = ({ value, onChange, options, label, allLabel = 'All' }) => (
   </div>
 );
 
-const ProjectsRegistry = ({ navigate, search, tweaks }) => {
+const ProjectsRegistry = ({ navigate, search, tweaks, currentUser }) => {
+  const isAdmin = !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
+  // Trainees and other non-admins only see projects they're a member of (or PI/lead on)
+  const visibleProjects = isAdmin ? PROJECTS : PROJECTS.filter(p =>
+    p.pi === currentUser?.id || p.lead === currentUser?.id || (p.members || []).includes(currentUser?.id)
+  );
+
   const [view, setView] = useState('cards');
   const [statusF, setStatusF] = useState('');
   const [healthF, setHealthF] = useState('');
@@ -28,7 +34,7 @@ const ProjectsRegistry = ({ navigate, search, tweaks }) => {
   const [sort, setSort] = useState('updated');
 
   const filtered = useMemo(() => {
-    let r = PROJECTS.filter(p => {
+    let r = visibleProjects.filter(p => {
       if (statusF && p.status !== statusF) return false;
       if (healthF && p.health !== healthF) return false;
       if (leadF && p.lead !== leadF) return false;
@@ -50,9 +56,9 @@ const ProjectsRegistry = ({ navigate, search, tweaks }) => {
     return r;
   }, [statusF, healthF, leadF, categoryF, rebF, awaitF, sort, search]);
 
-  const leads = [...new Set(PROJECTS.map(p => p.lead))].map(id => personById(id)).filter(Boolean);
-  const categories = [...new Set(PROJECTS.map(p => p.category))];
-  const rebOptions = [...new Set(PROJECTS.map(p => p.reb))];
+  const leads = [...new Set(visibleProjects.map(p => p.lead))].map(id => personById(id)).filter(Boolean);
+  const categories = [...new Set(visibleProjects.map(p => p.category))];
+  const rebOptions = [...new Set(visibleProjects.map(p => p.reb))];
 
   const clearAll = () => {
     setStatusF(''); setHealthF(''); setLeadF(''); setCategoryF(''); setRebF(''); setAwaitF('');
@@ -64,7 +70,7 @@ const ProjectsRegistry = ({ navigate, search, tweaks }) => {
       <div className="page-header row between" style={{ alignItems: 'flex-end' }}>
         <div>
           <h1 className="page-title">Projects</h1>
-          <p className="page-sub">{filtered.length} of {PROJECTS.length} projects shown</p>
+          <p className="page-sub">{filtered.length} of {visibleProjects.length} projects shown{!isAdmin ? ' · your assigned projects' : ''}</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn">

@@ -178,10 +178,34 @@ function App() {
   if (route.page === 'dashboard') pageEl = <Dashboard navigate={navigate} tweaks={t} toast={toast} openReport={openReport} currentUser={currentUser} showOnboarding={showOnboarding} dismissOnboarding={() => setShowOnboarding(false)} />;
   else if (route.page === 'projects' && route.id) {
     const project = PROJECTS.find(p => p.id === route.id);
-    if (project) pageEl = <ProjectDetail project={project} route={route} navigate={navigate} toast={toast} updates={updates} addUpdate={addUpdate} openReport={openReport} />;
-    else pageEl = <div className="page"><h2>Project not found</h2></div>;
+    const isAdmin = !!currentUser?.isAdmin;
+    const isMember = project && (
+      project.pi === currentUser?.id ||
+      project.lead === currentUser?.id ||
+      (project.members || []).includes(currentUser?.id)
+    );
+    if (!project) pageEl = <div className="page"><h2>Project not found</h2></div>;
+    else if (!isAdmin && !isMember) {
+      pageEl = (
+        <div className="page">
+          <div className="card card-pad" style={{ textAlign: 'center', padding: 56, maxWidth: 480, margin: '0 auto' }}>
+            <div style={{ width: 64, height: 64, margin: '0 auto', borderRadius: '50%', background: 'var(--bg-elevated)', color: 'var(--muted)', display: 'grid', placeItems: 'center' }}>
+              <Icon name="alert" size={28} />
+            </div>
+            <div className="serif" style={{ fontSize: 22, fontWeight: 600, marginTop: 14 }}>You don't have access to this project</div>
+            <p style={{ color: 'var(--muted)', marginTop: 6 }}>
+              Only members of this project can view it. Ask the PI to add you if you should be on the team.
+            </p>
+            <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => navigate({ page: 'projects' })}>
+              Back to your projects
+            </button>
+          </div>
+        </div>
+      );
+    }
+    else pageEl = <ProjectDetail project={project} route={route} navigate={navigate} toast={toast} updates={updates} addUpdate={addUpdate} openReport={openReport} />;
   }
-  else if (route.page === 'projects') pageEl = <ProjectsRegistry navigate={navigate} search={search} tweaks={t} />;
+  else if (route.page === 'projects') pageEl = <ProjectsRegistry navigate={navigate} search={search} tweaks={t} currentUser={currentUser} />;
   else if (route.page === 'inbox') pageEl = <InboxPage navigate={navigate} updates={updates} toast={toast} openReply={(update, project) => setAiReply({ update, project })} currentUser={currentUser} />;
   else if (route.page === 'deadlines') pageEl = <DeadlinesPage navigate={navigate} toast={toast} />;
   else if (route.page === 'tasks') pageEl = <MyTasksPage navigate={navigate} currentUser={currentUser} toast={toast} />;
