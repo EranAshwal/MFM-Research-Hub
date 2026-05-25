@@ -227,6 +227,13 @@ const TabOverview = ({ project, toast, currentUser }) => {
 const TabTimeline = ({ project, toast }) => {
   const [, force] = useState(0);
   const refresh = () => force(n => n + 1);
+  useEffect(() => {
+    const onChange = (e) => {
+      if (e.detail?.table === 'milestones' || e.detail?.table === 'poll') refresh();
+    };
+    window.addEventListener('mfm:data-changed', onChange);
+    return () => window.removeEventListener('mfm:data-changed', onChange);
+  }, []);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
   const isAdmin = !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
