@@ -573,9 +573,95 @@ const TraineeUpdatesPage = ({ navigate, updates }) => {
   );
 };
 
+const NewEventModal = ({ date, onClose, onSave }) => {
+  const [form, setForm] = useState({
+    date: date || '',
+    time: '09:00',
+    type: 'meeting',
+    title: '',
+    projectId: '',
+    notes: '',
+  });
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const submit = (e) => {
+    e.preventDefault();
+    if (!form.title.trim()) return;
+    onSave(form);
+    onClose();
+  };
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <form className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()} onSubmit={submit}>
+        <div className="modal-h">
+          <div className="serif" style={{ fontSize: 20, fontWeight: 600 }}>
+            New {form.type === 'meeting' ? 'meeting' : 'reminder'}
+          </div>
+          <button type="button" className="btn-icon btn-ghost" onClick={onClose}><Icon name="close" size={16} /></button>
+        </div>
+        <div className="modal-b" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', gap: 6, padding: 3, background: 'var(--bg-elevated)', borderRadius: 8, alignSelf: 'flex-start' }}>
+            {['meeting', 'reminder'].map(t => (
+              <button key={t} type="button" onClick={() => set('type', t)}
+                style={{ padding: '6px 14px', fontSize: 12, fontWeight: 500, borderRadius: 6,
+                         background: form.type === t ? 'var(--paper)' : 'transparent',
+                         boxShadow: form.type === t ? 'var(--shadow-1)' : 'none',
+                         color: form.type === t ? 'var(--ink)' : 'var(--muted)',
+                         textTransform: 'capitalize', cursor: 'pointer' }}>
+                {t}
+              </button>
+            ))}
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Title</div>
+            <input autoFocus value={form.title} onChange={e => set('title', e.target.value)}
+                   placeholder={form.type === 'meeting' ? 'e.g. PERIPATUM weekly sync' : 'e.g. Submit REB amendment'}
+                   style={{ width: '100%' }} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Date</div>
+              <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={{ width: '100%' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Time</div>
+              <input type="time" value={form.time} onChange={e => set('time', e.target.value)} style={{ width: '100%' }} />
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Project (optional)</div>
+            <select value={form.projectId} onChange={e => set('projectId', e.target.value)} style={{ width: '100%' }}>
+              <option value="">— No project —</option>
+              {PROJECTS.map(p => <option key={p.id} value={p.id}>{p.acronym} · {p.title}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Notes</div>
+            <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={3} style={{ width: '100%', resize: 'vertical' }} />
+          </div>
+        </div>
+        <div className="modal-f">
+          <button type="button" className="btn" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={!form.title.trim()}>
+            <Icon name="plus" size={14} stroke={2} /> Add to calendar
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
 const CalendarPage = ({ navigate }) => {
   // Calendar with milestones overlay
   const [view, setView] = useState('Month');
+  const [newEventDate, setNewEventDate] = useState(null);
+  const [userEvents, setUserEvents] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('mfm_user_events') || '[]'); } catch { return []; }
+  });
+  const saveUserEvent = (ev) => {
+    const next = [...userEvents, { ...ev, id: 'ue_' + Date.now() }];
+    setUserEvents(next);
+    try { localStorage.setItem('mfm_user_events', JSON.stringify(next)); } catch {}
+  };
   const today = new Date('2026-05-24');
   const month = today.getMonth();
   const year = today.getFullYear();
@@ -589,6 +675,18 @@ const CalendarPage = ({ navigate }) => {
     MILESTONES[pid].forEach(m => {
       const project = PROJECTS.find(p => p.id === pid);
       if (project) events.push({ date: m.due, title: m.title, project, type: 'milestone', done: m.status === 'done' });
+    });
+  });
+  // user-created meetings & reminders
+  userEvents.forEach(u => {
+    const project = u.projectId ? PROJECTS.find(p => p.id === u.projectId) : null;
+    events.push({
+      date: u.date,
+      title: u.title,
+      project: project || { id: null, acronym: u.type === 'meeting' ? 'MEETING' : 'REMINDER', title: u.notes || '' },
+      type: u.type,
+      time: u.time,
+      userCreated: true,
     });
   });
   const cells = [];
@@ -629,10 +727,15 @@ const CalendarPage = ({ navigate }) => {
                 : `${new Date(year, month).toLocaleDateString('en', { month: 'long', year: 'numeric' })} — portfolio milestones and deadlines`}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 6, padding: 3, background: 'var(--bg-elevated)', borderRadius: 8 }}>
-          {['Month', 'Week', 'List'].map(v => (
-            <button key={v} onClick={() => setView(v)} style={{ padding: '6px 12px', fontSize: 12, fontWeight: 500, borderRadius: 6, background: v === view ? 'var(--paper)' : 'transparent', boxShadow: v === view ? 'var(--shadow-1)' : 'none', color: v === view ? 'var(--ink)' : 'var(--muted)', cursor: 'pointer' }}>{v}</button>
-          ))}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button className="btn btn-primary" onClick={() => setNewEventDate(today.toISOString().slice(0, 10))}>
+            <Icon name="plus" size={14} stroke={2} /> New event
+          </button>
+          <div style={{ display: 'flex', gap: 6, padding: 3, background: 'var(--bg-elevated)', borderRadius: 8 }}>
+            {['Month', 'Week', 'List'].map(v => (
+              <button key={v} onClick={() => setView(v)} style={{ padding: '6px 12px', fontSize: 12, fontWeight: 500, borderRadius: 6, background: v === view ? 'var(--paper)' : 'transparent', boxShadow: v === view ? 'var(--shadow-1)' : 'none', color: v === view ? 'var(--ink)' : 'var(--muted)', cursor: 'pointer' }}>{v}</button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -648,17 +751,21 @@ const CalendarPage = ({ navigate }) => {
                 const date = new Date(year, month, d).toISOString().slice(0, 10);
                 const dayEvents = events.filter(e => e.date === date);
                 const isToday = d === today.getDate();
+                const evColor = (e) => e.type === 'meeting' ? 'var(--bayfront, #0D5D78)' : e.type === 'reminder' ? 'var(--maroon)' : e.done ? 'var(--status-grey-wash)' : 'var(--maroon)';
                 return (
-                  <div key={i} style={{ minHeight: 96, padding: 6, borderRadius: 8, background: isToday ? 'var(--maroon-wash)' : 'var(--bg-elevated)', border: '1px solid', borderColor: isToday ? 'var(--maroon)' : 'var(--hairline)' }}>
+                  <div key={i}
+                       onClick={() => setNewEventDate(date)}
+                       title="Click to add a meeting or reminder"
+                       style={{ minHeight: 96, padding: 6, borderRadius: 8, background: isToday ? 'var(--maroon-wash)' : 'var(--bg-elevated)', border: '1px solid', borderColor: isToday ? 'var(--maroon)' : 'var(--hairline)', cursor: 'pointer', position: 'relative' }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: isToday ? 'var(--maroon)' : 'var(--ink-2)', marginBottom: 4 }}>{d}</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                       {dayEvents.slice(0, 2).map((e, j) => (
-                        <button key={j} onClick={() => navigate({ page: 'projects', id: e.project.id, tab: 'timeline' })}
-                                style={{ background: e.done ? 'var(--status-grey-wash)' : 'var(--maroon)', color: e.done ? 'var(--muted)' : '#fff',
+                        <button key={j} onClick={(ev) => { ev.stopPropagation(); if (e.project.id) navigate({ page: 'projects', id: e.project.id, tab: 'timeline' }); }}
+                                style={{ background: evColor(e), color: e.done ? 'var(--muted)' : '#fff',
                                          fontSize: 9, padding: '2px 5px', borderRadius: 3, textAlign: 'left',
                                          textDecoration: e.done ? 'line-through' : 'none',
-                                         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', width: '100%' }}>
-                          {e.project.acronym}
+                                         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', width: '100%', cursor: 'pointer' }}>
+                          {e.userCreated ? (e.time ? `${e.time} ${e.title}` : e.title) : e.project.acronym}
                         </button>
                       ))}
                       {dayEvents.length > 2 && <div style={{ fontSize: 9, color: 'var(--muted)' }}>+{dayEvents.length - 2} more</div>}
@@ -710,17 +817,24 @@ const CalendarPage = ({ navigate }) => {
                       {d.getDate()}
                     </div>
                   </div>
-                  <div style={{ minHeight: 380, padding: 6, borderRadius: 8, background: isToday ? 'var(--maroon-wash)' : 'var(--bg-elevated)', border: '1px solid', borderColor: isToday ? 'var(--maroon)' : 'var(--hairline)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div onClick={() => setNewEventDate(dateStr)}
+                       title="Click to add a meeting or reminder"
+                       style={{ minHeight: 380, padding: 6, borderRadius: 8, background: isToday ? 'var(--maroon-wash)' : 'var(--bg-elevated)', border: '1px solid', borderColor: isToday ? 'var(--maroon)' : 'var(--hairline)', display: 'flex', flexDirection: 'column', gap: 6, cursor: 'pointer' }}>
                     {dayEvents.length === 0 && (
-                      <div style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'center', marginTop: 12 }}>—</div>
+                      <div style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'center', marginTop: 12 }}>+ add</div>
                     )}
-                    {dayEvents.map((e, j) => (
-                      <button key={j} onClick={() => navigate({ page: 'projects', id: e.project.id, tab: 'timeline' })}
-                              style={{ background: e.done ? 'var(--status-grey-wash)' : 'var(--paper)', borderLeft: `3px solid ${e.done ? 'var(--muted-2)' : 'var(--maroon)'}`, border: '1px solid var(--hairline)', borderLeftWidth: 3, padding: 8, borderRadius: 4, textAlign: 'left', cursor: 'pointer', textDecoration: e.done ? 'line-through' : 'none' }}>
-                        <div className="mono" style={{ fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{e.project.acronym}</div>
-                        <div style={{ fontSize: 11, fontWeight: 500, marginTop: 2, lineHeight: 1.3 }}>{e.title}</div>
-                      </button>
-                    ))}
+                    {dayEvents.map((e, j) => {
+                      const accent = e.type === 'meeting' ? 'var(--bayfront, #0D5D78)' : 'var(--maroon)';
+                      return (
+                        <button key={j} onClick={(ev) => { ev.stopPropagation(); if (e.project.id) navigate({ page: 'projects', id: e.project.id, tab: 'timeline' }); }}
+                                style={{ background: e.done ? 'var(--status-grey-wash)' : 'var(--paper)', borderLeft: `3px solid ${e.done ? 'var(--muted-2)' : accent}`, border: '1px solid var(--hairline)', borderLeftWidth: 3, padding: 8, borderRadius: 4, textAlign: 'left', cursor: 'pointer', textDecoration: e.done ? 'line-through' : 'none' }}>
+                          <div className="mono" style={{ fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            {e.userCreated && e.time ? `${e.time} · ` : ''}{e.project.acronym}
+                          </div>
+                          <div style={{ fontSize: 11, fontWeight: 500, marginTop: 2, lineHeight: 1.3 }}>{e.title}</div>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -769,6 +883,14 @@ const CalendarPage = ({ navigate }) => {
             </div>
           ))}
         </div>
+      )}
+
+      {newEventDate && (
+        <NewEventModal
+          date={newEventDate}
+          onClose={() => setNewEventDate(null)}
+          onSave={saveUserEvent}
+        />
       )}
     </div>
   );
