@@ -907,7 +907,7 @@ const TabFiles = ({ project, toast }) => {
                 <div style={{ fontSize: 11, color: 'var(--muted)' }}>{f.metadata?.mimetype || 'file'}</div>
               </div>
               <div style={{ fontSize: 12, color: 'var(--muted)' }}>{sizeOf(f)}</div>
-              <div style={{ fontSize: 12, color: 'var(--muted)' }}>{f.created_at ? relDate(f.created_at.slice(0, 10)) : '—'}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>{f.created_at ? relDate(f.created_at) : '—'}</div>
               <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>
                 <button className="btn-icon btn-ghost" title="Download" onClick={() => download(f)}>
                   <Icon name="download" size={14} />
