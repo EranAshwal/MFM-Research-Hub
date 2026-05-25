@@ -1,6 +1,163 @@
 /* MFM Research Hub — Project action modals (edit / status / comment / upload / summary / request-update) */
 
 // =========================================================================
+// NEW PROJECT — create a brand-new project
+// =========================================================================
+const NewProjectModal = ({ onClose, toast, navigate, currentUser }) => {
+  const me = currentUser || (window.AuthService?.getCurrentPerson?.());
+  const today = new Date().toISOString().slice(0, 10);
+  const inSixMonths = (() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 6);
+    return d.toISOString().slice(0, 10);
+  })();
+  const [p, setP] = useState({
+    title: '',
+    acronym: '',
+    description: '',
+    category: 'Clinical research',
+    studyDesign: 'TBD',
+    status: 'Idea / scoping',
+    health: 'green',
+    priority: 'Medium',
+    progress: 0,
+    pi: me?.id || '',
+    lead: me?.id || '',
+    reb: 'Not yet submitted',
+    start: today,
+    target: inSixMonths,
+    nextMilestone: 'Define scope and write protocol outline',
+    nextDue: inSixMonths,
+    bin: '',
+    coverColor: 'maroon',
+    awaitingUpdate: false,
+    awaitingReview: false,
+    fileCount: 0,
+    lastUpdate: today,
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setP(s => ({ ...s, [k]: v }));
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!p.title.trim()) { toast?.('Title is required'); return; }
+    if (!p.acronym.trim()) { toast?.('Acronym is required'); return; }
+    setSaving(true);
+    try {
+      const created = await window.DataService.createProject(p);
+      const newId = created?.id || p.id;
+      toast?.('Project created');
+      onClose();
+      if (newId) navigate?.({ page: 'projects', id: newId });
+      else navigate?.({ page: 'projects' });
+    } catch (err) {
+      console.error(err);
+      toast?.('Could not create project: ' + (err.message || 'unknown error'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const people = (window.PEOPLE || []);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <form className="modal" style={{ maxWidth: 640 }} onClick={e => e.stopPropagation()} onSubmit={submit}>
+        <div className="modal-h">
+          <div>
+            <div className="serif" style={{ fontSize: 20, fontWeight: 600 }}>New project</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>You can edit any of these details later.</div>
+          </div>
+          <button type="button" className="btn-icon btn-ghost" onClick={onClose}><Icon name="close" size={16} /></button>
+        </div>
+        <div className="modal-b" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <NPField label="Title">
+            <input autoFocus value={p.title} onChange={e => set('title', e.target.value)}
+                   placeholder="e.g. Postpartum Hemorrhage Risk Stratification"
+                   style={{ width: '100%' }} />
+          </NPField>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <NPField label="Acronym">
+              <input value={p.acronym} onChange={e => set('acronym', e.target.value.toUpperCase())}
+                     placeholder="e.g. PPH-RISK" style={{ width: '100%' }} />
+            </NPField>
+            <NPField label="Category">
+              <select value={p.category} onChange={e => set('category', e.target.value)} style={{ width: '100%' }}>
+                {['Clinical research', 'Translational', 'Education', 'Quality improvement', 'Health services', 'Other'].map(c => <option key={c}>{c}</option>)}
+              </select>
+            </NPField>
+          </div>
+          <NPField label="Description">
+            <textarea value={p.description} onChange={e => set('description', e.target.value)} rows={3}
+                      placeholder="One or two sentences on the question, population, and outcome."
+                      style={{ width: '100%', resize: 'vertical' }} />
+          </NPField>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <NPField label="Study design">
+              <select value={p.studyDesign} onChange={e => set('studyDesign', e.target.value)} style={{ width: '100%' }}>
+                {['TBD', 'Retrospective cohort', 'Prospective cohort', 'Case-control', 'RCT', 'Cross-sectional', 'Systematic review', 'QI / audit', 'Protocol / guideline', 'Other'].map(s => <option key={s}>{s}</option>)}
+              </select>
+            </NPField>
+            <NPField label="Status">
+              <select value={p.status} onChange={e => set('status', e.target.value)} style={{ width: '100%' }}>
+                {['Idea / scoping', 'Protocol development', 'REB submission', 'Data collection', 'Analysis', 'Manuscript drafting', 'Under review', 'Published', 'On hold'].map(s => <option key={s}>{s}</option>)}
+              </select>
+            </NPField>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <NPField label="PI">
+              <select value={p.pi} onChange={e => set('pi', e.target.value)} style={{ width: '100%' }}>
+                <option value="">— Select PI —</option>
+                {people.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}
+              </select>
+            </NPField>
+            <NPField label="Project lead">
+              <select value={p.lead} onChange={e => set('lead', e.target.value)} style={{ width: '100%' }}>
+                <option value="">— Select lead —</option>
+                {people.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}
+              </select>
+            </NPField>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            <NPField label="Start">
+              <input type="date" value={p.start} onChange={e => set('start', e.target.value)} style={{ width: '100%' }} />
+            </NPField>
+            <NPField label="Target completion">
+              <input type="date" value={p.target} onChange={e => set('target', e.target.value)} style={{ width: '100%' }} />
+            </NPField>
+            <NPField label="REB status">
+              <select value={p.reb} onChange={e => set('reb', e.target.value)} style={{ width: '100%' }}>
+                {['Not yet submitted', 'In preparation', 'Submitted', 'Approved', 'Exempt', 'Not required'].map(s => <option key={s}>{s}</option>)}
+              </select>
+            </NPField>
+          </div>
+          <NPField label="Next milestone">
+            <input value={p.nextMilestone} onChange={e => set('nextMilestone', e.target.value)}
+                   placeholder="What's the next concrete deliverable?" style={{ width: '100%' }} />
+          </NPField>
+          <NPField label="Next milestone due">
+            <input type="date" value={p.nextDue} onChange={e => set('nextDue', e.target.value)} style={{ width: '100%', maxWidth: 220 }} />
+          </NPField>
+        </div>
+        <div className="modal-f">
+          <button type="button" className="btn" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={saving || !p.title.trim() || !p.acronym.trim()}>
+            <Icon name="plus" size={14} stroke={2} /> {saving ? 'Creating…' : 'Create project'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+const NPField = ({ label, children }) => (
+  <div>
+    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>{label}</div>
+    {children}
+  </div>
+);
+
+// =========================================================================
 // EDIT PROJECT — edit core study fields
 // =========================================================================
 const EditProjectModal = ({ project, onClose, toast, onSaved }) => {

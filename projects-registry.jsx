@@ -76,7 +76,7 @@ const ProjectsRegistry = ({ navigate, search, tweaks, currentUser }) => {
           <button className="btn">
             <Icon name="download" size={14} /> Export CSV
           </button>
-          <button className="btn btn-primary">
+          <button className="btn btn-primary" onClick={() => window.__openNewProject?.()}>
             <Icon name="plus" size={14} stroke={2} /> New project
           </button>
         </div>

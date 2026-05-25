@@ -763,10 +763,63 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; color: var(--ink); }
 
   /* Project cards grid → single column */
   .page div[style*="grid-template-columns: repeat(3, 1fr)"]:not(.kpi-grid) { grid-template-columns: 1fr !important; }
+  .page div[style*="grid-template-columns: repeat(2, 1fr)"]:not(.kpi-grid) { grid-template-columns: 1fr !important; }
+  .page div[style*="grid-template-columns: 2.2fr 1fr"],
+  .page div[style*="grid-template-columns: 2fr 1fr"] { grid-template-columns: 1fr !important; }
+  .page div[style*="grid-template-columns: 1fr 1.7fr"] { grid-template-columns: 1fr !important; }
 
-  /* Tables horizontal scroll wrapper */
-  .card > .tbl, .card > div > .tbl { display: block; overflow-x: auto; }
-  .tbl { min-width: 700px; }
+  /* Filter bars and toolbars wrap */
+  .page > div[style*="display: flex"][style*="gap"] { flex-wrap: wrap; }
+
+  /* Card padding tighter on mobile */
+  .card-pad { padding: 16px !important; }
+
+  /* Buttons in toolbars hit-friendly */
+  .btn-sm { min-height: 36px; padding-block: 8px; }
+  .btn { min-height: 40px; }
+  .btn-icon { min-width: 36px; min-height: 36px; }
+
+  /* Inputs full width */
+  input, select, textarea { font-size: 16px; } /* prevents iOS zoom */
+
+  /* === Mobile-friendly tables: cards instead of horizontal scroll === */
+  .card > .tbl, .card > div > .tbl { display: block; overflow-x: visible; }
+  .tbl { min-width: 0; display: block; }
+  .tbl thead { display: none; }
+  .tbl tbody { display: block; }
+  .tbl tbody tr {
+    display: grid;
+    grid-template-columns: 24px 1fr auto;
+    gap: 4px 12px;
+    padding: 14px 14px;
+    border-bottom: 1px solid var(--hairline);
+    align-items: flex-start;
+  }
+  .tbl tbody tr:hover { background: transparent; }
+  .tbl tbody tr:active { background: var(--bg-elevated); }
+  .tbl tbody td {
+    display: block;
+    padding: 0;
+    border: 0;
+    font-size: 12px;
+    grid-column: 2;
+  }
+  /* Primary identifier cell sits first; cells that contain just a small icon collapse to col 1 */
+  .tbl tbody td:first-child { grid-column: 1; grid-row: 1 / span 3; padding-top: 4px; }
+  .tbl tbody td:nth-child(2) { grid-column: 2 / -1; grid-row: 1; }
+  .tbl tbody td:nth-child(3) { grid-column: 2 / -1; grid-row: 2; margin-top: 4px; }
+  /* Subsequent cells stack inline as a meta row with separators */
+  .tbl tbody td:nth-child(n+4) {
+    grid-column: 2 / -1;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+  /* Inside table cells, force avatar/chip groups to stay inline */
+  .tbl tbody td > div { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 
   /* Kanban scroll */
   .kanban { grid-template-columns: repeat(5, 80vw) !important; overflow-x: auto; gap: 10px; padding-bottom: 6px; }

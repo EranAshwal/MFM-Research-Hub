@@ -21,6 +21,12 @@ function App() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
   const [showNotify, setShowNotify] = useState(false);
+  const [showNewProject, setShowNewProject] = useState(false);
+  // Global helper so any deeply-nested button can open the new-project modal
+  useEffect(() => {
+    window.__openNewProject = () => setShowNewProject(true);
+    return () => { delete window.__openNewProject; };
+  }, []);
   const [showLogin, setShowLogin] = useState(false);
   const [report, setReport] = useState(null); // { type, project }
   const [aiReply, setAiReply] = useState(null); // { update, project }
@@ -184,31 +190,9 @@ function App() {
   if (route.page === 'dashboard') pageEl = <Dashboard navigate={navigate} tweaks={t} toast={toast} openReport={openReport} currentUser={currentUser} showOnboarding={showOnboarding} dismissOnboarding={() => setShowOnboarding(false)} />;
   else if (route.page === 'projects' && route.id) {
     const project = PROJECTS.find(p => p.id === route.id);
-    const isAdmin = !!currentUser?.isAdmin;
-    const isMember = project && (
-      project.pi === currentUser?.id ||
-      project.lead === currentUser?.id ||
-      (project.members || []).includes(currentUser?.id)
-    );
     if (!project) pageEl = <div className="page"><h2>Project not found</h2></div>;
-    else if (!isAdmin && !isMember) {
-      pageEl = (
-        <div className="page">
-          <div className="card card-pad" style={{ textAlign: 'center', padding: 56, maxWidth: 480, margin: '0 auto' }}>
-            <div style={{ width: 64, height: 64, margin: '0 auto', borderRadius: '50%', background: 'var(--bg-elevated)', color: 'var(--muted)', display: 'grid', placeItems: 'center' }}>
-              <Icon name="alert" size={28} />
-            </div>
-            <div className="serif" style={{ fontSize: 22, fontWeight: 600, marginTop: 14 }}>You don't have access to this project</div>
-            <p style={{ color: 'var(--muted)', marginTop: 6 }}>
-              Only members of this project can view it. Ask the PI to add you if you should be on the team.
-            </p>
-            <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => navigate({ page: 'projects' })}>
-              Back to your projects
-            </button>
-          </div>
-        </div>
-      );
-    }
+    // Any signed-in user can view a project. Role-specific actions (edit,
+    // approve updates, manage members) are gated inside ProjectDetail.
     else pageEl = <ProjectDetail project={project} route={route} navigate={navigate} toast={toast} updates={updates} addUpdate={addUpdate} openReport={openReport} />;
   }
   else if (route.page === 'projects') pageEl = <ProjectsRegistry navigate={navigate} search={search} tweaks={t} currentUser={currentUser} />;
@@ -238,13 +222,15 @@ function App() {
                 currentUser={currentUser} setShowNotif={setShowNotif} unreadCount={unreadCount}
                 navigate={navigate} route={route}
                 openMobile={() => setMobileOpen(true)}
-                onSendNotification={() => setShowNotify(true)} />
+                onSendNotification={() => setShowNotify(true)}
+                onNewProject={() => setShowNewProject(true)} />
         {pageEl}
       </div>
       <MobileBottomNav route={route} navigate={navigate} onSendNotification={() => setShowNotify(true)} />
       <NotificationDrawer open={showNotif} onClose={() => setShowNotif(false)} notifications={notifs}
                           navigate={navigate} markRead={() => { setNotifs(notifs.map(n => ({ ...n, unread: false }))); }} />
       <SendNotificationModal open={showNotify} onClose={() => setShowNotify(false)} onSend={sendNotification} currentUser={currentUser} />
+      {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} toast={toast} navigate={navigate} currentUser={currentUser} />}
       <ReportModal open={!!report} onClose={() => setReport(null)} type={report?.type} project={report?.project} toast={toast} />
       {aiReply && <AIReplyModal open={true} update={aiReply.update} project={aiReply.project}
                                  onClose={() => setAiReply(null)}

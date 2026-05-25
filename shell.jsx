@@ -101,7 +101,7 @@ const Sidebar = ({ route, navigate, collapsed, currentUser, awaitingReview, awai
   );
 };
 
-const Topbar = ({ collapsed, setCollapsed, search, setSearch, currentUser, setShowNotif, unreadCount, navigate, route, openMobile, onSendNotification }) => {
+const Topbar = ({ collapsed, setCollapsed, search, setSearch, currentUser, setShowNotif, unreadCount, navigate, route, openMobile, onSendNotification, onNewProject }) => {
   const crumbs = useMemo(() => {
     const map = { dashboard: 'Dashboard', inbox: 'Inbox', projects: 'Projects', tasks: 'My Tasks', updates: 'Trainee Updates',
                   reports: 'Reports', publications: 'Publications', deadlines: 'Deadlines', calendar: 'Calendar', files: 'Files', people: 'People', settings: 'Settings' };
@@ -125,7 +125,7 @@ const Topbar = ({ collapsed, setCollapsed, search, setSearch, currentUser, setSh
         <input value={search} onChange={(e) => setSearch(e.target.value)}
                placeholder="Search…" />
       </div>
-      <button className="btn btn-sm new-project-btn">
+      <button className="btn btn-sm new-project-btn" onClick={onNewProject}>
         <Icon name="plus" size={14} stroke={2} />
         <span>New project</span>
       </button>
