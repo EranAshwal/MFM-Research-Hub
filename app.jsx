@@ -13,6 +13,7 @@ function App() {
   // Check URL for invite token — handle accept-invite flow first
   const inviteToken = new URLSearchParams(location.search).get('invite');
 
+  const [, force] = useState(0);
   const [route, setRoute] = useState({ page: 'landing' });
   const [currentUser, setCurrentUser] = useState(null);
   const [search, setSearch] = useState('');

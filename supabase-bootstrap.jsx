@@ -203,22 +203,30 @@
     // When any progress_update or comment changes, refresh from DB and re-render the app.
     const channel = client.channel('mfm-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'progress_updates' }, async () => {
+        console.log('[Realtime] progress_updates changed');
         await window.DataService.refresh();
-        window.mountApp && window.mountApp();
+        window.dispatchEvent(new CustomEvent('mfm:data-changed', { detail: { table: 'progress_updates' } }));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, async () => {
+        console.log('[Realtime] comments changed');
         await window.DataService.refresh();
-        window.mountApp && window.mountApp();
+        window.dispatchEvent(new CustomEvent('mfm:data-changed', { detail: { table: 'comments' } }));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, async () => {
+        console.log('[Realtime] tasks changed');
         await window.DataService.refresh();
-        window.mountApp && window.mountApp();
+        window.dispatchEvent(new CustomEvent('mfm:data-changed', { detail: { table: 'tasks' } }));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'milestones' }, async () => {
+        await window.DataService.refresh();
+        window.dispatchEvent(new CustomEvent('mfm:data-changed', { detail: { table: 'milestones' } }));
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notes' }, async () => {
-        // Just trigger a soft re-render — listeners will refetch as needed
         window.dispatchEvent(new CustomEvent('mfm:notes-changed'));
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[Realtime] channel status:', status);
+      });
     window.__sbChannel = channel;
 
     // Initialize auth service (Phase 5)

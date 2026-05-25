@@ -78,7 +78,7 @@ const refreshAll = async () => {
         barriers: u.barriers, helpNeeded: u.help_needed, next: u.next_steps,
         percent: u.percent_complete, piStatus: u.pi_response_status,
         piResponseText: u.pi_response_text,
-        date: u.created_at ? u.created_at.slice(0, 10) : '',
+        date: u.created_at ? new Date(u.created_at).toLocaleDateString('en-CA') : '',
         createdAt: u.created_at,
       });
     });

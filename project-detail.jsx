@@ -351,6 +351,13 @@ const KANBAN_COLS = [
 const TabTasks = ({ project, toast }) => {
   const [, force] = useState(0);
   const refresh = () => force(n => n + 1);
+  useEffect(() => {
+    const onChange = (e) => {
+      if (e.detail?.table === 'tasks') refresh();
+    };
+    window.addEventListener('mfm:data-changed', onChange);
+    return () => window.removeEventListener('mfm:data-changed', onChange);
+  }, []);
   const [editing, setEditing] = useState(null);
   const [adding, setAdding] = useState(false);
   const initial = (window.TASKS[project.id] && window.TASKS[project.id].length)
@@ -535,10 +542,20 @@ const ProgressUpdateForm = ({ project, onSubmit, onClose }) => {
 // Comment thread shown under each progress update
 const UpdateThread = ({ update, project, toast, currentUser }) => {
   const [, force] = useState(0);
+  const refresh = () => force(n => n + 1);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const comments = (window.COMMENTS?.byUpdate?.[update.id]) || [];
   const isAdmin = !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
+
+  // Listen for live updates from Supabase Realtime
+  useEffect(() => {
+    const onChange = (e) => {
+      if (e.detail?.table === 'comments') refresh();
+    };
+    window.addEventListener('mfm:data-changed', onChange);
+    return () => window.removeEventListener('mfm:data-changed', onChange);
+  }, []);
 
   const send = async (e) => {
     e.preventDefault();
@@ -549,13 +566,13 @@ const UpdateThread = ({ update, project, toast, currentUser }) => {
         updateId: update.id, projectId: project.id, userId: currentUser.id, text,
       });
       setText('');
-      force(n => n + 1);
+      refresh();
     } catch (err) { toast?.('Failed: ' + err.message, 'error'); }
     setSending(false);
   };
   const del = async (c) => {
     if (!confirm('Delete this comment?')) return;
-    try { await window.DataService.deleteComment(c.id); force(n => n + 1); }
+    try { await window.DataService.deleteComment(c.id); refresh(); }
     catch (err) { toast?.('Failed: ' + err.message, 'error'); }
   };
 
@@ -605,6 +622,14 @@ const UpdateThread = ({ update, project, toast, currentUser }) => {
 
 const TabUpdates = ({ project, toast, updates, addUpdate, currentUser }) => {
   const [showForm, setShowForm] = useState(false);
+  const [, force] = useState(0);
+  useEffect(() => {
+    const onChange = (e) => {
+      if (e.detail?.table === 'progress_updates') force(n => n + 1);
+    };
+    window.addEventListener('mfm:data-changed', onChange);
+    return () => window.removeEventListener('mfm:data-changed', onChange);
+  }, []);
   const [aiReplyFor, setAiReplyFor] = useState(null);
   const projectUpdates = updates.filter(u => u.project === project.id).sort((a, b) => new Date(b.date) - new Date(a.date));
 
