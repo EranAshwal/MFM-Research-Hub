@@ -7,12 +7,15 @@ const sb = () => window.__sb;
 
 // Refresh data from Supabase after a mutation
 const refreshAll = async () => {
-  const [peopleRes, projectsRes, membersRes, pubsRes, milestonesRes] = await Promise.all([
+  const [peopleRes, projectsRes, membersRes, pubsRes, milestonesRes, updatesRes, commentsRes, tasksRes] = await Promise.all([
     sb().from('people').select('*').order('joined', { ascending: true }),
     sb().from('projects').select('*').order('start_date', { ascending: true }),
     sb().from('project_members').select('*'),
     sb().from('publications').select('*').order('year', { ascending: false }),
     sb().from('milestones').select('*').order('due_date', { ascending: true }),
+    sb().from('progress_updates').select('*').order('created_at', { ascending: false }),
+    sb().from('comments').select('*').order('created_at', { ascending: true }),
+    sb().from('tasks').select('*').order('created_at', { ascending: false }),
   ]);
 
   if (peopleRes.data) {
@@ -63,6 +66,52 @@ const refreshAll = async () => {
       };
       if (!window.MILESTONES[m.project_id]) window.MILESTONES[m.project_id] = [];
       window.MILESTONES[m.project_id].push(mapped);
+    });
+  }
+
+  if (updatesRes && updatesRes.data) {
+    window.UPDATES.length = 0;
+    updatesRes.data.forEach(u => {
+      window.UPDATES.push({
+        id: u.id, project: u.project_id, user: u.user_id,
+        completed: u.completed_since_last_update, inProgress: u.currently_working_on,
+        barriers: u.barriers, helpNeeded: u.help_needed, next: u.next_steps,
+        percent: u.percent_complete, piStatus: u.pi_response_status,
+        piResponseText: u.pi_response_text,
+        date: u.created_at ? u.created_at.slice(0, 10) : '',
+        createdAt: u.created_at,
+      });
+    });
+  }
+
+  if (commentsRes && commentsRes.data) {
+    window.COMMENTS = { byUpdate: {}, byProject: {} };
+    commentsRes.data.forEach(c => {
+      const mapped = {
+        id: c.id, updateId: c.update_id, projectId: c.project_id,
+        userId: c.user_id, text: c.comment_text, createdAt: c.created_at,
+      };
+      if (c.update_id) {
+        if (!window.COMMENTS.byUpdate[c.update_id]) window.COMMENTS.byUpdate[c.update_id] = [];
+        window.COMMENTS.byUpdate[c.update_id].push(mapped);
+      }
+      if (c.project_id) {
+        if (!window.COMMENTS.byProject[c.project_id]) window.COMMENTS.byProject[c.project_id] = [];
+        window.COMMENTS.byProject[c.project_id].push(mapped);
+      }
+    });
+  }
+
+  if (tasksRes && tasksRes.data) {
+    Object.keys(window.TASKS).forEach(k => delete window.TASKS[k]);
+    tasksRes.data.forEach(t => {
+      const mapped = {
+        id: t.id, projectId: t.project_id, title: t.title, description: t.description,
+        owner: t.owner_id, priority: t.priority, status: t.status,
+        due: t.due_date, completed: t.completed_at ? t.completed_at.slice(0, 10) : null,
+      };
+      if (!window.TASKS[t.project_id]) window.TASKS[t.project_id] = [];
+      window.TASKS[t.project_id].push(mapped);
     });
   }
 };
@@ -153,6 +202,56 @@ window.DataService = {
     return data;
   },
 
+  // ============= TASKS =============
+  async createTask({ projectId, title, description, ownerId, priority = 'Medium', status = 'todo', dueDate }) {
+    if (!title) throw new Error('Title is required');
+    const { data, error } = await sb().from('tasks').insert({
+      project_id: projectId, title, description: description || null,
+      owner_id: ownerId || null, priority, status, due_date: dueDate || null,
+    }).select().single();
+    if (error) throw error;
+    await refreshAll();
+    return data;
+  },
+
+  async updateTask(taskId, patch) {
+    const row = {};
+    if ('title'     in patch) row.title       = patch.title;
+    if ('description' in patch) row.description = patch.description || null;
+    if ('ownerId'   in patch) row.owner_id    = patch.ownerId || null;
+    if ('priority'  in patch) row.priority    = patch.priority;
+    if ('status'    in patch) {
+      row.status = patch.status;
+      row.completed_at = patch.status === 'done' ? new Date().toISOString() : null;
+    }
+    if ('dueDate'   in patch) row.due_date    = patch.dueDate || null;
+    const { error } = await sb().from('tasks').update(row).eq('id', taskId);
+    if (error) throw error;
+    await refreshAll();
+  },
+
+  async updateTaskStatus(taskId, status) {
+    const row = { status };
+    if (status === 'done') row.completed_at = new Date().toISOString();
+    const { error } = await sb().from('tasks').update(row).eq('id', taskId);
+    if (error) throw error;
+    await refreshAll();
+  },
+
+  async deleteTask(taskId) {
+    const { error } = await sb().from('tasks').delete().eq('id', taskId);
+    if (error) throw error;
+    await refreshAll();
+  },
+
+  // ============= ACTIVITY =============
+  async logActivity(projectId, userId, actionType, text, detail) {
+    await sb().from('activity_log').insert({
+      project_id: projectId, user_id: userId,
+      action_type: actionType, text, detail,
+    });
+  },
+
   // ============= PROGRESS UPDATES =============
   async submitProgressUpdate(update) {
     const row = {
@@ -166,27 +265,46 @@ window.DataService = {
       percent_complete: update.percent,
       pi_response_status: 'pending',
     };
-    const { error } = await sb().from('progress_updates').insert(row);
+    const { data, error } = await sb().from('progress_updates').insert(row).select().single();
     if (error) throw error;
     // Also update project progress field
     if (update.project && typeof update.percent === 'number') {
       await sb().from('projects').update({ progress: update.percent, last_update_date: new Date().toISOString().slice(0, 10) }).eq('id', update.project);
     }
+    await refreshAll();
+    return data;
   },
 
-  // ============= TASKS =============
-  async updateTaskStatus(taskId, status) {
-    const { error } = await sb().from('tasks').update({ status }).eq('id', taskId);
+  async setUpdateStatus(updateId, status, responseText) {
+    const row = { pi_response_status: status };
+    if (responseText !== undefined) row.pi_response_text = responseText;
+    const { error } = await sb().from('progress_updates').update(row).eq('id', updateId);
     if (error) throw error;
+    await refreshAll();
   },
 
-  // ============= ACTIVITY =============
-  async logActivity(projectId, userId, actionType, text, detail) {
-    await sb().from('activity_log').insert({
-      project_id: projectId, user_id: userId,
-      action_type: actionType, text, detail,
-    });
+  // ============= COMMENTS (thread on a progress update) =============
+  async addUpdateComment({ updateId, projectId, userId, text }) {
+    if (!text || !text.trim()) throw new Error('Comment required');
+    const { data, error } = await sb().from('comments').insert({
+      update_id: updateId || null,
+      project_id: projectId || null,
+      user_id: userId,
+      comment_text: text.trim(),
+    }).select().single();
+    if (error) throw error;
+    await refreshAll();
+    return data;
   },
+
+  async deleteComment(commentId) {
+    const { error } = await sb().from('comments').delete().eq('id', commentId);
+    if (error) throw error;
+    await refreshAll();
+  },
+
+  // Expose refresh so other code can manually trigger
+  refresh: refreshAll,
 
   // ============= MILESTONES =============
   async createMilestone({ projectId, title, ownerId, dueDate, status = 'todo', notes }) {

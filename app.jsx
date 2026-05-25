@@ -91,8 +91,13 @@ function App() {
     setRoute({ page: 'landing' });
   };
 
-  const addUpdate = (u) => {
-    setUpdates(arr => [u, ...arr]);
+  const addUpdate = async (u) => {
+    try {
+      await window.DataService.submitProgressUpdate(u);
+      toast(`Update submitted`);
+    } catch (err) {
+      toast('Submit failed: ' + err.message, 'error');
+    }
     setNotifs(n => [{ id: `n-${Date.now()}`, type: 'update', project: u.project, text: `${personById(u.user)?.name} submitted a progress update`, date: u.date, unread: true }, ...n]);
   };
 

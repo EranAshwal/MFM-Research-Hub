@@ -534,7 +534,119 @@ const MilestoneModal = ({ project, milestone, onClose, toast, onSaved }) => {
   );
 };
 
-window.MilestoneModal = MilestoneModal;
+// =========================================================================
+// TASK detail/edit
+// =========================================================================
+const TaskModal = ({ project, task, onClose, toast, onSaved }) => {
+  const isEdit = !!task;
+  const [title, setTitle] = useState(task?.title || '');
+  const [description, setDescription] = useState(task?.description || '');
+  const [ownerId, setOwnerId] = useState(task?.owner || project.lead || '');
+  const [priority, setPriority] = useState(task?.priority || 'Medium');
+  const [status, setStatus] = useState(task?.status || 'todo');
+  const [dueDate, setDueDate] = useState(task?.due || '');
+  const [saving, setSaving] = useState(false);
+
+  const teamIds = new Set([project.pi, project.lead, ...(project.members || [])].filter(Boolean));
+  const teamPeople = Array.from(teamIds).map(id => personById(id)).filter(Boolean);
+  const isAdmin = !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
+  const currentUser = window.AuthService?.getCurrentPerson();
+  const canDelete = isAdmin || task?.owner === currentUser?.id;
+
+  const save = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      if (isEdit) {
+        await window.DataService.updateTask(task.id, { title, description, ownerId, priority, status, dueDate });
+        toast?.('Task saved');
+      } else {
+        await window.DataService.createTask({ projectId: project.id, title, description, ownerId, priority, status, dueDate });
+        toast?.('Task added');
+      }
+      onSaved?.();
+      onClose();
+    } catch (err) { toast?.('Failed: ' + err.message, 'error'); }
+    setSaving(false);
+  };
+
+  const del = async () => {
+    if (!confirm(`Delete task "${task.title}"?`)) return;
+    setSaving(true);
+    try {
+      await window.DataService.deleteTask(task.id);
+      toast?.('Task deleted');
+      onSaved?.();
+      onClose();
+    } catch (err) { toast?.('Delete failed: ' + err.message, 'error'); }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <form className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()} onSubmit={save}>
+        <div className="modal-h">
+          <div>
+            <div className="serif" style={{ fontSize: 18, fontWeight: 600 }}>{isEdit ? 'Task details' : 'Add task'}</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{project.acronym}</div>
+          </div>
+          <button type="button" className="btn-icon btn-ghost" onClick={onClose}><Icon name="close" size={16} /></button>
+        </div>
+        <div className="modal-b" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <Field label="Title">
+            <input value={title} onChange={e => setTitle(e.target.value)} required autoFocus style={{ width: '100%' }} />
+          </Field>
+          <Field label="Description (optional)">
+            <textarea rows={3} value={description} onChange={e => setDescription(e.target.value)} style={{ width: '100%', resize: 'vertical' }} />
+          </Field>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Owner">
+              <select value={ownerId} onChange={e => setOwnerId(e.target.value)} style={{ width: '100%' }}>
+                <option value="">— Unassigned —</option>
+                {teamPeople.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Due date">
+              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} style={{ width: '100%' }} />
+            </Field>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Priority">
+              <select value={priority} onChange={e => setPriority(e.target.value)} style={{ width: '100%' }}>
+                {['High','Medium','Low'].map(s => <option key={s}>{s}</option>)}
+              </select>
+            </Field>
+            <Field label="Status">
+              <select value={status} onChange={e => setStatus(e.target.value)} style={{ width: '100%' }}>
+                <option value="todo">To do</option>
+                <option value="in_progress">In progress</option>
+                <option value="waiting">Waiting</option>
+                <option value="review">Review</option>
+                <option value="done">Done</option>
+              </select>
+            </Field>
+          </div>
+        </div>
+        <div className="modal-f" style={{ justifyContent: 'space-between' }}>
+          <div>
+            {isEdit && canDelete && (
+              <button type="button" className="btn btn-ghost" style={{ color: 'var(--status-red)' }} onClick={del} disabled={saving}>
+                <Icon name="trash" size={13} /> Delete
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={saving || !title}>
+              {saving ? 'Saving…' : (isEdit ? 'Save' : 'Add task')}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+window.TaskModal = TaskModal;
 Object.assign(window, {
   EditProjectModal, ChangeStatusModal, AddCommentModal,
   UploadFileModal, GenerateSummaryModal, RequestUpdateModal,

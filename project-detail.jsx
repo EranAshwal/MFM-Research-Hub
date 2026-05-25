@@ -349,17 +349,23 @@ const KANBAN_COLS = [
 ];
 
 const TabTasks = ({ project, toast }) => {
-  const initial = TASKS[project.id] || [
-    { id: 'demo1', title: 'Define next milestone', owner: project.lead, priority: 'Medium', status: 'todo', due: project.nextDue },
-    { id: 'demo2', title: 'Schedule check-in with PI', owner: project.lead, priority: 'Low', status: 'todo', due: project.nextDue },
-  ];
+  const [, force] = useState(0);
+  const refresh = () => force(n => n + 1);
+  const [editing, setEditing] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const initial = (window.TASKS[project.id] && window.TASKS[project.id].length)
+    ? window.TASKS[project.id]
+    : [];
   const [tasks, setTasks] = useState(initial);
+  // Keep tasks in sync with global TASKS dict on every render
+  const liveTasks = window.TASKS[project.id] || [];
+  const useTasks = liveTasks.length || tasks.length ? liveTasks : tasks;
   const [draggedId, setDraggedId] = useState(null);
   const [dragOverCol, setDragOverCol] = useState(null);
   const [filterOwner, setFilterOwner] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
 
-  const filteredTasks = tasks.filter(t => {
+  const filteredTasks = useTasks.filter(t => {
     if (filterOwner && t.owner !== filterOwner) return false;
     if (filterPriority && t.priority !== filterPriority) return false;
     return true;
@@ -367,18 +373,21 @@ const TabTasks = ({ project, toast }) => {
 
   const onDragStart = (e, id) => { setDraggedId(id); e.dataTransfer.effectAllowed = 'move'; };
   const onDragOver = (e, colId) => { e.preventDefault(); setDragOverCol(colId); };
-  const onDrop = (e, colId) => {
+  const onDrop = async (e, colId) => {
     e.preventDefault();
     if (draggedId) {
-      const t = tasks.find(x => x.id === draggedId);
+      const t = useTasks.find(x => x.id === draggedId);
       if (t && t.status !== colId) {
-        setTasks(tasks.map(x => x.id === draggedId ? { ...x, status: colId } : x));
-        toast(`Task moved to "${KANBAN_COLS.find(c => c.id === colId).label}"`);
+        try {
+          await window.DataService.updateTaskStatus(draggedId, colId);
+          toast(`Task moved to "${KANBAN_COLS.find(c => c.id === colId).label}"`);
+          refresh();
+        } catch (err) { toast('Move failed: ' + err.message, 'error'); }
       }
     }
     setDraggedId(null); setDragOverCol(null);
   };
-  const owners = [...new Set(tasks.map(t => t.owner))];
+  const owners = [...new Set(useTasks.map(t => t.owner))];
 
   return (
     <div>
@@ -389,7 +398,7 @@ const TabTasks = ({ project, toast }) => {
           <Select label="Priority" value={filterPriority} onChange={setFilterPriority}
                   options={['High', 'Medium', 'Low']} />
         </div>
-        <button className="btn btn-primary"><Icon name="plus" size={14} stroke={2} /> Add task</button>
+        <button className="btn btn-primary" onClick={() => setAdding(true)}><Icon name="plus" size={14} stroke={2} /> Add task</button>
       </div>
 
       <div className="kanban">
@@ -415,8 +424,10 @@ const TabTasks = ({ project, toast }) => {
                   <div key={t.id}
                        className={`kanban-card ${draggedId === t.id ? 'dragging' : ''}`}
                        draggable
+                       onClick={() => setEditing(t)}
                        onDragStart={e => onDragStart(e, t.id)}
-                       onDragEnd={() => { setDraggedId(null); setDragOverCol(null); }}>
+                       onDragEnd={() => { setDraggedId(null); setDragOverCol(null); }}
+                       style={{ cursor: 'pointer' }}>
                     <div style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.4 }}>{t.title}</div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
                       <Avatar user={owner} size="sm" />
@@ -437,6 +448,8 @@ const TabTasks = ({ project, toast }) => {
           );
         })}
       </div>
+      {adding && <TaskModal project={project} toast={toast} onClose={() => setAdding(false)} onSaved={refresh} />}
+      {editing && <TaskModal project={project} task={editing} toast={toast} onClose={() => setEditing(null)} onSaved={refresh} />}
     </div>
   );
 };
@@ -453,7 +466,20 @@ const ProgressUpdateForm = ({ project, onSubmit, onClose }) => {
   ];
   const submit = (e) => {
     e.preventDefault();
-    onSubmit({ id: `up-${Date.now()}`, project: project.id, user: project.lead, date: new Date().toISOString().slice(0, 10), percent: form.percent, completed: form.completed, inProgress: form.inProgress, barriers: form.barriers || 'None reported', helpNeeded: form.helpNeeded || 'None at this stage', next: form.next, piStatus: 'pending' });
+    const currentUser = window.AuthService?.getCurrentPerson();
+    onSubmit({
+      id: `up-${Date.now()}`,
+      project: project.id,
+      user: currentUser?.id || project.lead,
+      date: new Date().toISOString().slice(0, 10),
+      percent: form.percent,
+      completed: form.completed,
+      inProgress: form.inProgress,
+      barriers: form.barriers || 'None reported',
+      helpNeeded: form.helpNeeded || 'None at this stage',
+      next: form.next,
+      piStatus: 'pending',
+    });
   };
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -506,7 +532,78 @@ const ProgressUpdateForm = ({ project, onSubmit, onClose }) => {
   );
 };
 
-const TabUpdates = ({ project, toast, updates, addUpdate }) => {
+// Comment thread shown under each progress update
+const UpdateThread = ({ update, project, toast, currentUser }) => {
+  const [, force] = useState(0);
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const comments = (window.COMMENTS?.byUpdate?.[update.id]) || [];
+  const isAdmin = !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
+
+  const send = async (e) => {
+    e.preventDefault();
+    if (!text.trim() || !currentUser) return;
+    setSending(true);
+    try {
+      await window.DataService.addUpdateComment({
+        updateId: update.id, projectId: project.id, userId: currentUser.id, text,
+      });
+      setText('');
+      force(n => n + 1);
+    } catch (err) { toast?.('Failed: ' + err.message, 'error'); }
+    setSending(false);
+  };
+  const del = async (c) => {
+    if (!confirm('Delete this comment?')) return;
+    try { await window.DataService.deleteComment(c.id); force(n => n + 1); }
+    catch (err) { toast?.('Failed: ' + err.message, 'error'); }
+  };
+
+  return (
+    <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--hairline)' }}>
+      <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, marginBottom: 10 }}>
+        Conversation{comments.length > 0 ? ` · ${comments.length}` : ''}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10 }}>
+        {comments.length === 0 && (
+          <div style={{ fontSize: 12, color: 'var(--muted)', fontStyle: 'italic' }}>No comments yet — start the conversation.</div>
+        )}
+        {comments.map(c => {
+          const author = personById(c.userId);
+          const canDelete = isAdmin || c.userId === currentUser?.id;
+          return (
+            <div key={c.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <Avatar user={author} size="sm" />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                  <strong style={{ fontSize: 12 }}>{author?.name || 'Unknown'}</strong>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{new Date(c.createdAt).toLocaleString()}</span>
+                </div>
+                <div style={{ fontSize: 13, lineHeight: 1.55, marginTop: 3, whiteSpace: 'pre-wrap', color: 'var(--ink-2)' }}>{c.text}</div>
+              </div>
+              {canDelete && (
+                <button className="btn-icon btn-ghost" onClick={() => del(c)} title="Delete">
+                  <Icon name="trash" size={11} />
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <form onSubmit={send} style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+        <Avatar user={currentUser} size="sm" />
+        <textarea value={text} onChange={e => setText(e.target.value)} rows={2}
+                  placeholder="Reply to this update…"
+                  style={{ flex: 1, resize: 'vertical', fontSize: 13, fontFamily: 'var(--ff-sans)' }} />
+        <button type="submit" className="btn btn-sm btn-primary" disabled={sending || !text.trim()}>
+          {sending ? '…' : 'Post'}
+        </button>
+      </form>
+    </div>
+  );
+};
+
+const TabUpdates = ({ project, toast, updates, addUpdate, currentUser }) => {
   const [showForm, setShowForm] = useState(false);
   const [aiReplyFor, setAiReplyFor] = useState(null);
   const projectUpdates = updates.filter(u => u.project === project.id).sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -588,15 +685,27 @@ const TabUpdates = ({ project, toast, updates, addUpdate }) => {
               </div>
 
               <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--hairline)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button className="btn btn-sm btn-primary" onClick={() => setAiReplyFor(u)}>
-                  <Icon name="sparkle" size={12} /> Suggest reply
-                </button>
-                <button className="btn btn-sm"><Icon name="message" size={12} /> Comment</button>
-                <button className="btn btn-sm" onClick={() => toast('Update approved')}><Icon name="check" size={12} /> Mark approved</button>
-                <button className="btn btn-sm">Request clarification</button>
+                {window.AuthService?.isAdmin?.() && (
+                  <>
+                    <button className="btn btn-sm btn-primary" onClick={() => setAiReplyFor(u)}>
+                      <Icon name="sparkle" size={12} /> Suggest reply
+                    </button>
+                    <button className="btn btn-sm" onClick={async () => {
+                      try { await window.DataService.setUpdateStatus(u.id, 'approved'); toast('Update approved'); }
+                      catch (e) { toast('Failed: ' + e.message, 'error'); }
+                    }}><Icon name="check" size={12} /> Mark approved</button>
+                    <button className="btn btn-sm" onClick={async () => {
+                      try { await window.DataService.setUpdateStatus(u.id, 'requested_clarification'); toast('Clarification requested'); }
+                      catch (e) { toast('Failed: ' + e.message, 'error'); }
+                    }}>Request clarification</button>
+                  </>
+                )}
                 <div style={{ flex: 1 }} />
                 <button className="btn btn-sm btn-ghost"><Icon name="reports" size={12} /> Use in report</button>
               </div>
+
+              {/* Live comment thread */}
+              <UpdateThread update={u} project={project} toast={toast} currentUser={currentUser} />
             </div>
           );
         })}
@@ -636,25 +745,84 @@ const SAMPLE_FILES = [
 ];
 
 const TabFiles = ({ project, toast }) => {
-  const [activeFolder, setActiveFolder] = useState('all');
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [files, setFiles] = useState(SAMPLE_FILES);
+  const isAdmin = !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
+  const currentUser = window.AuthService?.getCurrentPerson();
 
-  const list = activeFolder === 'all' ? files : files.filter(f => f.folder === activeFolder);
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error } = await window.__sb.storage.from('project-files')
+        .list(project.id, { limit: 200, sortBy: { column: 'created_at', order: 'desc' } });
+      if (error) throw error;
+      setFiles(data || []);
+    } catch (e) {
+      setError(e.message || String(e));
+    }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, [project.id]);
+
+  const uploadFiles = async (fileList) => {
+    if (!fileList || !fileList.length) return;
+    setUploading(true);
+    let ok = 0;
+    for (const f of fileList) {
+      const safe = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `${project.id}/${Date.now()}-${safe}`;
+      const { error } = await window.__sb.storage.from('project-files').upload(path, f);
+      if (error) {
+        toast(`Upload failed (${f.name}): ${error.message}`, 'error');
+      } else {
+        ok++;
+        try {
+          await window.DataService.logActivity(project.id, currentUser?.id, 'upload',
+            `uploaded ${f.name}`, `${(f.size / 1024).toFixed(1)} KB`);
+        } catch {}
+      }
+    }
+    setUploading(false);
+    if (ok) toast(`Uploaded ${ok} file${ok === 1 ? '' : 's'}`);
+    load();
+  };
 
   const onDrop = (e) => {
     e.preventDefault(); setDragOver(false);
-    const dropped = Array.from(e.dataTransfer.files || []);
-    if (dropped.length) {
-      const newFiles = dropped.map((f, i) => ({
-        id: `new-${Date.now()}-${i}`, name: f.name, type: f.name.split('.').pop().toUpperCase(),
-        folder: activeFolder === 'all' ? 'other' : activeFolder,
-        uploadedBy: 'u1', date: new Date().toISOString().slice(0, 10), version: 1,
-        size: f.size > 1024 * 1024 ? `${(f.size / 1024 / 1024).toFixed(1)} MB` : `${(f.size / 1024).toFixed(0)} KB`,
-      }));
-      setFiles([...newFiles, ...files]);
-      toast(`Uploaded ${dropped.length} file${dropped.length > 1 ? 's' : ''}`);
-    }
+    uploadFiles(Array.from(e.dataTransfer.files || []));
+  };
+
+  const download = async (file) => {
+    try {
+      const { data, error } = await window.__sb.storage.from('project-files')
+        .createSignedUrl(`${project.id}/${file.name}`, 300); // 5-minute URL
+      if (error) throw error;
+      window.open(data.signedUrl, '_blank');
+    } catch (e) { toast('Download failed: ' + e.message, 'error'); }
+  };
+
+  const del = async (file) => {
+    if (!confirm(`Delete ${file.name}? This is permanent.`)) return;
+    try {
+      const { error } = await window.__sb.storage.from('project-files')
+        .remove([`${project.id}/${file.name}`]);
+      if (error) throw error;
+      toast('Deleted');
+      load();
+    } catch (e) { toast('Delete failed: ' + e.message, 'error'); }
+  };
+
+  // Strip the timestamp prefix the uploader added, so display names look clean
+  const displayName = (name) => name.replace(/^\d{13}-/, '');
+  const sizeOf = (file) => {
+    const b = file.metadata?.size || 0;
+    if (b > 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`;
+    if (b > 1024) return `${(b / 1024).toFixed(0)} KB`;
+    return `${b} B`;
   };
 
   return (
@@ -662,79 +830,72 @@ const TabFiles = ({ project, toast }) => {
       <div className="phi-banner" style={{ marginBottom: 16 }}>
         <Icon name="alert" size={18} stroke={2} />
         <div>
-          <strong>Do not upload patient-identifiable information (PHI).</strong> Files in this prototype are stored locally and are not encrypted. For real research data, use only systems approved by your institutional privacy office.
+          <strong>Do not upload patient-identifiable information (PHI).</strong> Files are stored in a private Supabase bucket scoped to project members.
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 20 }}>
-        <div>
-          <div className="eyebrow" style={{ marginBottom: 8 }}>Folders</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <button onClick={() => setActiveFolder('all')}
-                    style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 6, fontSize: 13, fontWeight: 500, color: activeFolder === 'all' ? 'var(--maroon)' : 'var(--ink-2)', background: activeFolder === 'all' ? 'var(--maroon-wash)' : 'transparent', textAlign: 'left' }}>
-              <Icon name="folder" size={14} />
-              <span style={{ flex: 1 }}>All files</span>
-              <span style={{ fontSize: 11, color: 'var(--muted)' }}>{files.length}</span>
-            </button>
-            {FILE_FOLDERS.map(f => {
-              const count = files.filter(x => x.folder === f.id).length;
-              return (
-                <button key={f.id} onClick={() => setActiveFolder(f.id)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 6, fontSize: 13, color: activeFolder === f.id ? 'var(--maroon)' : 'var(--ink-2)', background: activeFolder === f.id ? 'var(--maroon-wash)' : 'transparent', textAlign: 'left' }}>
-                  <Icon name={f.icon} size={14} />
-                  <span style={{ flex: 1 }}>{f.label}</span>
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{count}</span>
-                </button>
-              );
-            })}
-          </div>
+      <div onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+           onDragLeave={() => setDragOver(false)}
+           onDrop={onDrop}
+           style={{ padding: 22, border: '2px dashed', borderColor: dragOver ? 'var(--maroon)' : 'var(--border-strong)', borderRadius: 12, background: dragOver ? 'var(--maroon-wash)' : 'var(--bg-elevated)', display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16, transition: 'all 0.15s' }}>
+        <div style={{ width: 40, height: 40, background: 'var(--paper)', borderRadius: 10, display: 'grid', placeItems: 'center', color: 'var(--maroon)' }}>
+          <Icon name="upload" size={18} />
         </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>{uploading ? 'Uploading…' : 'Drop files here or click to upload'}</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Any file type. Stored in <code>project-files/{project.id}/</code>.</div>
+        </div>
+        <label className="btn btn-primary" style={{ cursor: 'pointer' }}>
+          <input type="file" multiple style={{ display: 'none' }} disabled={uploading}
+                 onChange={e => uploadFiles(Array.from(e.target.files))} />
+          <Icon name="upload" size={14} /> Browse
+        </label>
+      </div>
 
-        <div>
-          <div onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-               onDragLeave={() => setDragOver(false)}
-               onDrop={onDrop}
-               style={{ padding: 22, border: '2px dashed', borderColor: dragOver ? 'var(--maroon)' : 'var(--border-strong)', borderRadius: 12, background: dragOver ? 'var(--maroon-wash)' : 'var(--bg-elevated)', display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16, transition: 'all 0.15s' }}>
-            <div style={{ width: 40, height: 40, background: 'var(--paper)', borderRadius: 10, display: 'grid', placeItems: 'center', color: 'var(--maroon)' }}>
-              <Icon name="upload" size={18} />
+      <div className="card" style={{ overflow: 'hidden' }}>
+        <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)', display: 'grid', gridTemplateColumns: '32px 1fr 120px 100px 80px', gap: 12, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, color: 'var(--muted)' }}>
+          <div></div><div>File</div><div>Size</div><div>Uploaded</div><div></div>
+        </div>
+        {loading && <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Loading files…</div>}
+        {error && (
+          <div style={{ padding: 30, color: 'var(--status-red)', fontSize: 13 }}>
+            <strong>Could not list files:</strong> {error}
+            <div style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)' }}>
+              Most likely the <code>project-files</code> Storage bucket hasn't been created yet, or storage RLS isn't set up. See migrations.sql.
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>Drop files here or click to upload</div>
-              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Files go into <strong>{activeFolder === 'all' ? 'Other' : FILE_FOLDERS.find(f => f.id === activeFolder)?.label}</strong>. PDF, DOCX, XLSX, CSV, images.</div>
-            </div>
-            <button className="btn btn-primary">
-              <Icon name="upload" size={14} /> Browse
-            </button>
           </div>
-
-          <div className="card" style={{ overflow: 'hidden' }}>
-            <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)', display: 'grid', gridTemplateColumns: '32px 1fr 140px 100px 100px 40px', gap: 12, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, color: 'var(--muted)' }}>
-              <div></div><div>File</div><div>Uploaded by</div><div>Version</div><div>Date</div><div></div>
-            </div>
-            {list.map(f => {
-              const user = personById(f.uploadedBy);
-              return (
-                <div key={f.id} className="file-row">
-                  <div className="file-icon">{f.type}</div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{f.size}</div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Avatar user={user} size="sm" />
-                    <span style={{ fontSize: 11, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.name.split(' ').slice(-1)[0]}</span>
-                  </div>
-                  <div style={{ fontSize: 12 }}>v{f.version}</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>{relDate(f.date)}</div>
-                  <button className="btn-icon btn-ghost"><Icon name="moreV" size={14} /></button>
+        )}
+        {!loading && !error && files.length === 0 && (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No files yet. Drop some above.</div>
+        )}
+        {!loading && !error && files.map(f => {
+          const ext = (f.name.split('.').pop() || '').toUpperCase().slice(0, 4);
+          return (
+            <div key={f.name} className="file-row"
+                 style={{ gridTemplateColumns: '32px 1fr 120px 100px 80px', cursor: 'pointer' }}
+                 onClick={() => download(f)}>
+              <div className="file-icon">{ext}</div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {displayName(f.name)}
                 </div>
-              );
-            })}
-            {list.length === 0 && (
-              <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No files in this folder yet.</div>
-            )}
-          </div>
-        </div>
+                <div style={{ fontSize: 11, color: 'var(--muted)' }}>{f.metadata?.mimetype || 'file'}</div>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>{sizeOf(f)}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>{f.created_at ? relDate(f.created_at.slice(0, 10)) : '—'}</div>
+              <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>
+                <button className="btn-icon btn-ghost" title="Download" onClick={() => download(f)}>
+                  <Icon name="download" size={14} />
+                </button>
+                {isAdmin && (
+                  <button className="btn-icon btn-ghost" title="Delete" onClick={() => del(f)}>
+                    <Icon name="trash" size={13} />
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -794,6 +955,9 @@ const TabActivity = ({ project, navigate }) => {
 const ProjectDetail = ({ project, route, navigate, toast, updates, addUpdate, openReport }) => {
   const tab = route.tab || 'overview';
   const setTab = (t) => navigate({ page: 'projects', id: project.id, tab: t });
+  const currentUser = window.AuthService?.getCurrentPerson();
+  const [headerComment, setHeaderComment] = useState(false);
+  const [headerUpload, setHeaderUpload] = useState(false);
   const tabs = [
     { id: 'overview', label: 'Overview', icon: 'home' },
     { id: 'timeline', label: 'Timeline', icon: 'timeline' },
@@ -834,8 +998,8 @@ const ProjectDetail = ({ project, route, navigate, toast, updates, addUpdate, op
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn"><Icon name="message" size={14} /> Comment</button>
-          <button className="btn"><Icon name="upload" size={14} /> Upload</button>
+          <button className="btn" onClick={() => setHeaderComment(true)}><Icon name="message" size={14} /> Comment</button>
+          <button className="btn" onClick={() => setHeaderUpload(true)}><Icon name="upload" size={14} /> Upload</button>
           <button className="btn btn-primary" onClick={() => openReport('summary', project)}>
             <Icon name="reports" size={14} /> Generate report
           </button>
@@ -855,10 +1019,13 @@ const ProjectDetail = ({ project, route, navigate, toast, updates, addUpdate, op
       {tab === 'overview' && <TabOverview project={project} toast={toast} currentUser={window.AuthService?.getCurrentPerson()} />}
       {tab === 'timeline' && <TabTimeline project={project} toast={toast} />}
       {tab === 'tasks' && <TabTasks project={project} toast={toast} />}
-      {tab === 'updates' && <TabUpdates project={project} toast={toast} updates={updates} addUpdate={addUpdate} />}
+      {tab === 'updates' && <TabUpdates project={project} toast={toast} updates={updates} addUpdate={addUpdate} currentUser={window.AuthService?.getCurrentPerson()} />}
       {tab === 'files' && <TabFiles project={project} toast={toast} />}
       {tab === 'reports' && <TabReports project={project} openReport={openReport} />}
       {tab === 'activity' && <TabActivity project={project} navigate={navigate} />}
+
+      {headerComment && <AddCommentModal project={project} toast={toast} currentUser={currentUser} onClose={() => setHeaderComment(false)} />}
+      {headerUpload && <UploadFileModal project={project} toast={toast} currentUser={currentUser} onClose={() => setHeaderUpload(false)} />}
     </div>
   );
 };

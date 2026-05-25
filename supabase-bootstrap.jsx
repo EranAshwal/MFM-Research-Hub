@@ -40,20 +40,26 @@
     console.log('[Supabase] Fetching data…');
 
     // Fetch in parallel
-    const [peopleRes, projectsRes, membersRes, pubsRes, milestonesRes] = await Promise.all([
+    const [peopleRes, projectsRes, membersRes, pubsRes, milestonesRes, updatesRes, commentsRes, tasksRes] = await Promise.all([
       client.from('people').select('*').order('joined', { ascending: true }),
       client.from('projects').select('*').order('start_date', { ascending: true }),
       client.from('project_members').select('*'),
       client.from('publications').select('*').order('year', { ascending: false }),
       client.from('milestones').select('*').order('due_date', { ascending: true }),
+      client.from('progress_updates').select('*').order('created_at', { ascending: false }),
+      client.from('comments').select('*').order('created_at', { ascending: true }),
+      client.from('tasks').select('*').order('created_at', { ascending: false }),
     ]);
 
     if (peopleRes.error) throw new Error('people: ' + peopleRes.error.message);
     if (projectsRes.error) throw new Error('projects: ' + projectsRes.error.message);
     if (membersRes.error) throw new Error('project_members: ' + membersRes.error.message);
-    // publications + milestones non-fatal
+    // publications + milestones + updates non-fatal
     if (pubsRes.error) console.warn('[Supabase] publications:', pubsRes.error.message);
     if (milestonesRes.error) console.warn('[Supabase] milestones:', milestonesRes.error.message);
+    if (updatesRes.error) console.warn('[Supabase] updates:', updatesRes.error.message);
+    if (commentsRes.error) console.warn('[Supabase] comments:', commentsRes.error.message);
+    if (tasksRes.error) console.warn('[Supabase] tasks:', tasksRes.error.message);
 
     // Map Supabase rows (snake_case) → app format (camelCase)
     const people = peopleRes.data.map(p => ({
@@ -141,8 +147,79 @@
       });
     }
 
+    // Map progress_updates into window.UPDATES
+    if (updatesRes.data) {
+      window.UPDATES.length = 0;
+      updatesRes.data.forEach(u => {
+        window.UPDATES.push({
+          id: u.id, project: u.project_id, user: u.user_id,
+          completed: u.completed_since_last_update, inProgress: u.currently_working_on,
+          barriers: u.barriers, helpNeeded: u.help_needed, next: u.next_steps,
+          percent: u.percent_complete, piStatus: u.pi_response_status,
+          piResponseText: u.pi_response_text,
+          date: u.created_at ? u.created_at.slice(0, 10) : '',
+          createdAt: u.created_at,
+        });
+      });
+    }
+
+    // Map comments by update_id and project_id
+    window.COMMENTS = { byUpdate: {}, byProject: {} };
+    if (commentsRes.data) {
+      commentsRes.data.forEach(c => {
+        const mapped = {
+          id: c.id, updateId: c.update_id, projectId: c.project_id,
+          userId: c.user_id, text: c.comment_text, createdAt: c.created_at,
+        };
+        if (c.update_id) {
+          if (!window.COMMENTS.byUpdate[c.update_id]) window.COMMENTS.byUpdate[c.update_id] = [];
+          window.COMMENTS.byUpdate[c.update_id].push(mapped);
+        }
+        if (c.project_id) {
+          if (!window.COMMENTS.byProject[c.project_id]) window.COMMENTS.byProject[c.project_id] = [];
+          window.COMMENTS.byProject[c.project_id].push(mapped);
+        }
+      });
+    }
+
+    // Map tasks into per-project TASKS dict
+    Object.keys(window.TASKS).forEach(k => delete window.TASKS[k]);
+    if (tasksRes.data) {
+      tasksRes.data.forEach(t => {
+        const mapped = {
+          id: t.id, projectId: t.project_id, title: t.title, description: t.description,
+          owner: t.owner_id, priority: t.priority, status: t.status,
+          due: t.due_date, completed: t.completed_at ? t.completed_at.slice(0, 10) : null,
+        };
+        if (!window.TASKS[t.project_id]) window.TASKS[t.project_id] = [];
+        window.TASKS[t.project_id].push(mapped);
+      });
+    }
+
     const ms = Math.round(performance.now() - startTime);
-    console.log(`[Supabase] Loaded ${people.length} people + ${projects.length} projects + ${publications.length} publications in ${ms}ms`);
+    console.log(`[Supabase] Loaded ${people.length} people + ${projects.length} projects + ${publications.length} publications + ${window.UPDATES.length} updates in ${ms}ms`);
+
+    // ============== REALTIME SUBSCRIPTIONS ==============
+    // When any progress_update or comment changes, refresh from DB and re-render the app.
+    const channel = client.channel('mfm-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'progress_updates' }, async () => {
+        await window.DataService.refresh();
+        window.mountApp && window.mountApp();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, async () => {
+        await window.DataService.refresh();
+        window.mountApp && window.mountApp();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, async () => {
+        await window.DataService.refresh();
+        window.mountApp && window.mountApp();
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notes' }, async () => {
+        // Just trigger a soft re-render — listeners will refetch as needed
+        window.dispatchEvent(new CustomEvent('mfm:notes-changed'));
+      })
+      .subscribe();
+    window.__sbChannel = channel;
 
     // Initialize auth service (Phase 5)
     if (window.AuthService) {
