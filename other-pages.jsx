@@ -575,6 +575,7 @@ const TraineeUpdatesPage = ({ navigate, updates }) => {
 
 const CalendarPage = ({ navigate }) => {
   // Calendar with milestones overlay
+  const [view, setView] = useState('Month');
   const today = new Date('2026-05-24');
   const month = today.getMonth();
   const year = today.getFullYear();
@@ -594,74 +595,181 @@ const CalendarPage = ({ navigate }) => {
   for (let i = 0; i < firstDay; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
+  // Week view: 7 days starting on the Sunday of the current week
+  const weekStart = new Date(year, month, today.getDate() - today.getDay());
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    return d;
+  });
+
+  // List view: all upcoming events sorted by date
+  const listEvents = events
+    .filter(e => !e.done)
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  // Group list events by month for nice headers
+  const listGroups = {};
+  listEvents.forEach(e => {
+    const d = new Date(e.date);
+    const key = d.toLocaleDateString('en', { month: 'long', year: 'numeric' });
+    (listGroups[key] = listGroups[key] || []).push(e);
+  });
+
   return (
     <div className="page">
       <div className="page-header row between">
         <div>
           <h1 className="page-title">Calendar</h1>
-          <p className="page-sub">{new Date(year, month).toLocaleDateString('en', { month: 'long', year: 'numeric' })} — portfolio milestones and deadlines</p>
+          <p className="page-sub">
+            {view === 'Week'
+              ? `Week of ${weekStart.toLocaleDateString('en', { month: 'short', day: 'numeric' })} — portfolio milestones and deadlines`
+              : view === 'List'
+                ? 'All upcoming milestones and deadlines'
+                : `${new Date(year, month).toLocaleDateString('en', { month: 'long', year: 'numeric' })} — portfolio milestones and deadlines`}
+          </p>
         </div>
         <div style={{ display: 'flex', gap: 6, padding: 3, background: 'var(--bg-elevated)', borderRadius: 8 }}>
           {['Month', 'Week', 'List'].map(v => (
-            <button key={v} style={{ padding: '6px 12px', fontSize: 12, fontWeight: 500, borderRadius: 6, background: v === 'Month' ? 'var(--paper)' : 'transparent', boxShadow: v === 'Month' ? 'var(--shadow-1)' : 'none', color: v === 'Month' ? 'var(--ink)' : 'var(--muted)' }}>{v}</button>
+            <button key={v} onClick={() => setView(v)} style={{ padding: '6px 12px', fontSize: 12, fontWeight: 500, borderRadius: 6, background: v === view ? 'var(--paper)' : 'transparent', boxShadow: v === view ? 'var(--shadow-1)' : 'none', color: v === view ? 'var(--ink)' : 'var(--muted)', cursor: 'pointer' }}>{v}</button>
           ))}
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 1fr', gap: 20 }}>
+      {view === 'Month' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 1fr', gap: 20 }}>
+          <div className="card" style={{ padding: 14, overflow: 'hidden' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                <div key={d} className="eyebrow" style={{ textAlign: 'center', padding: '6px 0' }}>{d}</div>
+              ))}
+              {cells.map((d, i) => {
+                if (d === null) return <div key={i} />;
+                const date = new Date(year, month, d).toISOString().slice(0, 10);
+                const dayEvents = events.filter(e => e.date === date);
+                const isToday = d === today.getDate();
+                return (
+                  <div key={i} style={{ minHeight: 96, padding: 6, borderRadius: 8, background: isToday ? 'var(--maroon-wash)' : 'var(--bg-elevated)', border: '1px solid', borderColor: isToday ? 'var(--maroon)' : 'var(--hairline)' }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: isToday ? 'var(--maroon)' : 'var(--ink-2)', marginBottom: 4 }}>{d}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      {dayEvents.slice(0, 2).map((e, j) => (
+                        <button key={j} onClick={() => navigate({ page: 'projects', id: e.project.id, tab: 'timeline' })}
+                                style={{ background: e.done ? 'var(--status-grey-wash)' : 'var(--maroon)', color: e.done ? 'var(--muted)' : '#fff',
+                                         fontSize: 9, padding: '2px 5px', borderRadius: 3, textAlign: 'left',
+                                         textDecoration: e.done ? 'line-through' : 'none',
+                                         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', width: '100%' }}>
+                          {e.project.acronym}
+                        </button>
+                      ))}
+                      {dayEvents.length > 2 && <div style={{ fontSize: 9, color: 'var(--muted)' }}>+{dayEvents.length - 2} more</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="card card-pad">
+            <h3 style={{ fontFamily: 'var(--ff-serif)', fontSize: 16, fontWeight: 600, marginBottom: 14 }}>Upcoming this month</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {events.filter(e => {
+                const d = new Date(e.date);
+                return d.getMonth() === month && d.getFullYear() === year && !e.done;
+              }).sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 10).map((e, i) => (
+                <button key={i} onClick={() => navigate({ page: 'projects', id: e.project.id, tab: 'timeline' })}
+                        style={{ display: 'grid', gridTemplateColumns: '36px 1fr', gap: 10, alignItems: 'center', padding: 10, borderRadius: 8, border: '1px solid var(--hairline)', background: 'var(--paper)', cursor: 'pointer', textAlign: 'left' }}>
+                  <div style={{ width: 36, height: 40, background: 'var(--maroon-wash)', borderRadius: 6, textAlign: 'center', paddingTop: 4, color: 'var(--maroon)' }}>
+                    <div style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase' }}>{new Date(e.date).toLocaleDateString('en', { month: 'short' })}</div>
+                    <div className="serif" style={{ fontSize: 16, fontWeight: 700, lineHeight: 1 }}>{new Date(e.date).getDate()}</div>
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.title}</div>
+                    <div className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>{e.project.acronym}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {view === 'Week' && (
         <div className="card" style={{ padding: 14, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-              <div key={d} className="eyebrow" style={{ textAlign: 'center', padding: '6px 0' }}>{d}</div>
-            ))}
-            {cells.map((d, i) => {
-              if (d === null) return <div key={i} />;
-              const date = new Date(year, month, d).toISOString().slice(0, 10);
-              const dayEvents = events.filter(e => e.date === date);
-              const isToday = d === today.getDate();
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6 }}>
+            {weekDays.map((d, i) => {
+              const dateStr = d.toISOString().slice(0, 10);
+              const dayEvents = events.filter(e => e.date === dateStr);
+              const isToday = d.toDateString() === today.toDateString();
               return (
-                <div key={i} style={{ minHeight: 96, padding: 6, borderRadius: 8, background: isToday ? 'var(--maroon-wash)' : 'var(--bg-elevated)', border: '1px solid', borderColor: isToday ? 'var(--maroon)' : 'var(--hairline)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: isToday ? 'var(--maroon)' : 'var(--ink-2)', marginBottom: 4 }}>{d}</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    {dayEvents.slice(0, 2).map((e, j) => (
+                <div key={i} style={{ display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ textAlign: 'center', padding: '8px 0 10px', borderBottom: '1px solid var(--hairline)', marginBottom: 8 }}>
+                    <div className="eyebrow" style={{ color: isToday ? 'var(--maroon)' : 'var(--muted)' }}>
+                      {d.toLocaleDateString('en', { weekday: 'short' })}
+                    </div>
+                    <div className="serif" style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.1, marginTop: 4, color: isToday ? 'var(--maroon)' : 'var(--ink)' }}>
+                      {d.getDate()}
+                    </div>
+                  </div>
+                  <div style={{ minHeight: 380, padding: 6, borderRadius: 8, background: isToday ? 'var(--maroon-wash)' : 'var(--bg-elevated)', border: '1px solid', borderColor: isToday ? 'var(--maroon)' : 'var(--hairline)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {dayEvents.length === 0 && (
+                      <div style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'center', marginTop: 12 }}>—</div>
+                    )}
+                    {dayEvents.map((e, j) => (
                       <button key={j} onClick={() => navigate({ page: 'projects', id: e.project.id, tab: 'timeline' })}
-                              style={{ background: e.done ? 'var(--status-grey-wash)' : 'var(--maroon)', color: e.done ? 'var(--muted)' : '#fff',
-                                       fontSize: 9, padding: '2px 5px', borderRadius: 3, textAlign: 'left',
-                                       textDecoration: e.done ? 'line-through' : 'none',
-                                       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', width: '100%' }}>
-                        {e.project.acronym}
+                              style={{ background: e.done ? 'var(--status-grey-wash)' : 'var(--paper)', borderLeft: `3px solid ${e.done ? 'var(--muted-2)' : 'var(--maroon)'}`, border: '1px solid var(--hairline)', borderLeftWidth: 3, padding: 8, borderRadius: 4, textAlign: 'left', cursor: 'pointer', textDecoration: e.done ? 'line-through' : 'none' }}>
+                        <div className="mono" style={{ fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{e.project.acronym}</div>
+                        <div style={{ fontSize: 11, fontWeight: 500, marginTop: 2, lineHeight: 1.3 }}>{e.title}</div>
                       </button>
                     ))}
-                    {dayEvents.length > 2 && <div style={{ fontSize: 9, color: 'var(--muted)' }}>+{dayEvents.length - 2} more</div>}
                   </div>
                 </div>
               );
             })}
           </div>
         </div>
+      )}
 
-        <div className="card card-pad">
-          <h3 style={{ fontFamily: 'var(--ff-serif)', fontSize: 16, fontWeight: 600, marginBottom: 14 }}>Upcoming this month</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {events.filter(e => {
-              const d = new Date(e.date);
-              return d.getMonth() === month && d.getFullYear() === year && !e.done;
-            }).sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 10).map((e, i) => (
-              <button key={i} onClick={() => navigate({ page: 'projects', id: e.project.id, tab: 'timeline' })}
-                      style={{ display: 'grid', gridTemplateColumns: '36px 1fr', gap: 10, alignItems: 'center', padding: 10, borderRadius: 8, border: '1px solid var(--hairline)', background: 'var(--paper)', cursor: 'pointer', textAlign: 'left' }}>
-                <div style={{ width: 36, height: 40, background: 'var(--maroon-wash)', borderRadius: 6, textAlign: 'center', paddingTop: 4, color: 'var(--maroon)' }}>
-                  <div style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase' }}>{new Date(e.date).toLocaleDateString('en', { month: 'short' })}</div>
-                  <div className="serif" style={{ fontSize: 16, fontWeight: 700, lineHeight: 1 }}>{new Date(e.date).getDate()}</div>
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.title}</div>
-                  <div className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>{e.project.acronym}</div>
-                </div>
-              </button>
-            ))}
-          </div>
+      {view === 'List' && (
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          {Object.keys(listGroups).length === 0 && (
+            <div style={{ padding: 32, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No upcoming milestones.</div>
+          )}
+          {Object.entries(listGroups).map(([groupKey, items]) => (
+            <div key={groupKey}>
+              <div style={{ padding: '12px 18px', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)', borderTop: '1px solid var(--hairline)' }}>
+                <div className="eyebrow">{groupKey}</div>
+              </div>
+              {items.map((e, i) => {
+                const d = new Date(e.date);
+                const daysOut = Math.round((d - today) / (24 * 3600 * 1000));
+                return (
+                  <button key={i} onClick={() => navigate({ page: 'projects', id: e.project.id, tab: 'timeline' })}
+                          style={{ width: '100%', display: 'grid', gridTemplateColumns: '64px 1fr 160px 110px', gap: 16, alignItems: 'center', padding: '14px 18px', borderBottom: '1px solid var(--hairline)', background: 'var(--paper)', cursor: 'pointer', textAlign: 'left' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div className="mono" style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: 'var(--maroon)', letterSpacing: '0.06em' }}>
+                        {d.toLocaleDateString('en', { weekday: 'short' })}
+                      </div>
+                      <div className="serif" style={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: 'var(--maroon)' }}>
+                        {d.getDate()}
+                      </div>
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{e.title}</div>
+                      <div className="mono" style={{ fontSize: 10, color: 'var(--muted)', marginTop: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{e.project.acronym} · {e.project.title}</div>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                      {d.toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 500, textAlign: 'right', color: daysOut < 0 ? 'var(--status-red)' : daysOut <= 14 ? 'var(--maroon)' : 'var(--muted)' }}>
+                      {daysOut < 0 ? `${Math.abs(daysOut)}d overdue` : daysOut === 0 ? 'Today' : `in ${daysOut}d`}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </div>
-      </div>
+      )}
     </div>
   );
 };
