@@ -1,5 +1,22 @@
 /* MFM Research Hub — project detail workspace (7 tabs) */
 
+/* MFM Research Hub — Project detail page (tabs: Overview, Timeline, Tasks, Updates, Discussion, Files, Reports, Activity) */
+
+// Permission helpers
+// - canManageProject: admin only. Archive, delete, change status, edit metadata, add/remove members.
+// - canContributeToProject: admin OR signed-in project member (pi/lead/members[]).
+//   Trainees on a project can edit timeline, tasks, comments, upload files, submit updates
+//   — but NEVER archive or delete the project.
+const canManageProject = () => !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
+const canContributeToProject = (project) => {
+  if (canManageProject()) return true;
+  const me = window.AuthService?.getCurrentPerson?.();
+  if (!me || !project) return false;
+  return project.pi === me.id
+      || project.lead === me.id
+      || (project.members || []).includes(me.id);
+};
+
 // Pick a person from PEOPLE to add to a project
 const AddMemberModal = ({ project, onClose, toast, onAdded }) => {
   const [search, setSearch] = useState('');
@@ -84,7 +101,8 @@ const TabOverview = ({ project, toast, currentUser }) => {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [generatingSummary, setGeneratingSummary] = useState(false);
   const [requestingUpdate, setRequestingUpdate] = useState(false);
-  const isAdmin = !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
+  const isAdmin = canManageProject();
+  const canContribute = canContributeToProject(project);
   const pi = personById(project.pi);
   const lead = personById(project.lead);
   const members = project.members.map(personById).filter(Boolean);
@@ -202,10 +220,11 @@ const TabOverview = ({ project, toast, currentUser }) => {
             <button className="btn" onClick={() => setRequestingUpdate(true)}><Icon name="updates" size={14} /> Request update from trainee</button>
             <button className="btn" onClick={() => setGeneratingSummary(true)}><Icon name="reports" size={14} /> Generate project summary</button>
             <button className="btn" onClick={() => setUploadingFile(true)}><Icon name="upload" size={14} /> Upload file</button>
-            <button className="btn" onClick={() => setAddingComment(true)}><Icon name="message" size={14} /> Add comment</button>
+            <button className="btn" onClick={() => setAddingComment(true)} disabled={!canContribute}><Icon name="message" size={14} /> Add comment</button>
+            <button className="btn" onClick={() => canContribute && setUploadingFile(true)} disabled={!canContribute}><Icon name="upload" size={14} /> Upload file</button>
             <div style={{ height: 1, background: 'var(--border)', margin: '6px 0' }} />
-            <button className="btn" onClick={() => isAdmin && setChangingStatus(true)} disabled={!isAdmin}><Icon name="alert" size={14} /> Change status</button>
-            <button className="btn" style={{ color: 'var(--status-red)' }} onClick={() => isAdmin && archive()} disabled={!isAdmin}>Archive project</button>
+            <button className="btn" onClick={() => isAdmin && setChangingStatus(true)} disabled={!isAdmin} title={isAdmin ? '' : 'Only admins can change project status'}><Icon name="alert" size={14} /> Change status</button>
+            <button className="btn" style={{ color: isAdmin ? 'var(--status-red)' : 'var(--muted)' }} onClick={() => isAdmin && archive()} disabled={!isAdmin} title={isAdmin ? '' : 'Only admins can archive projects'}>Archive project</button>
           </div>
         </div>
       </div>
@@ -236,8 +255,8 @@ const TabTimeline = ({ project, toast }) => {
   }, []);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
-  const isAdmin = !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
-  const canEdit = isAdmin; // could also allow project members later
+  const isAdmin = canManageProject();
+  const canEdit = canContributeToProject(project); // members can edit timeline too
 
   const milestones = (MILESTONES[project.id] && MILESTONES[project.id].length)
     ? MILESTONES[project.id]
@@ -782,7 +801,8 @@ const TabFiles = ({ project, toast }) => {
   const [error, setError] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const isAdmin = !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
+  const isAdmin = canManageProject();
+  const canContribute = canContributeToProject(project);
   const currentUser = window.AuthService?.getCurrentPerson();
 
   const load = async () => {
@@ -866,19 +886,23 @@ const TabFiles = ({ project, toast }) => {
         </div>
       </div>
 
-      <div onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+      <div onDragOver={e => { e.preventDefault(); if (canContribute) setDragOver(true); }}
            onDragLeave={() => setDragOver(false)}
-           onDrop={onDrop}
-           style={{ padding: 22, border: '2px dashed', borderColor: dragOver ? 'var(--maroon)' : 'var(--border-strong)', borderRadius: 12, background: dragOver ? 'var(--maroon-wash)' : 'var(--bg-elevated)', display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16, transition: 'all 0.15s' }}>
+           onDrop={canContribute ? onDrop : (e) => e.preventDefault()}
+           style={{ padding: 22, border: '2px dashed', borderColor: dragOver ? 'var(--maroon)' : 'var(--border-strong)', borderRadius: 12, background: dragOver ? 'var(--maroon-wash)' : 'var(--bg-elevated)', display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16, transition: 'all 0.15s', opacity: canContribute ? 1 : 0.55 }}>
         <div style={{ width: 40, height: 40, background: 'var(--paper)', borderRadius: 10, display: 'grid', placeItems: 'center', color: 'var(--maroon)' }}>
           <Icon name="upload" size={18} />
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>{uploading ? 'Uploading…' : 'Drop files here or click to upload'}</div>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>
+            {!canContribute ? 'View-only — only project members can upload files'
+              : uploading ? 'Uploading…' : 'Drop files here or click to upload'}
+          </div>
           <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Any file type. Stored in <code>project-files/{project.id}/</code>.</div>
         </div>
-        <label className="btn btn-primary" style={{ cursor: 'pointer' }}>
-          <input type="file" multiple style={{ display: 'none' }} disabled={uploading}
+        <label className="btn btn-primary" style={{ cursor: canContribute ? 'pointer' : 'not-allowed', opacity: canContribute ? 1 : 0.6 }}
+               title={canContribute ? '' : 'Only project members can upload files'}>
+          <input type="file" multiple style={{ display: 'none' }} disabled={uploading || !canContribute}
                  onChange={e => uploadFiles(Array.from(e.target.files))} />
           <Icon name="upload" size={14} /> Browse
         </label>
