@@ -976,6 +976,15 @@ const TabDiscussion = ({ project, toast, currentUser }) => {
   const [posting, setPosting] = useState(false);
   const me = currentUser || window.AuthService?.getCurrentPerson();
 
+  // Re-render when activity_log changes via realtime
+  useEffect(() => {
+    const handler = (e) => {
+      if (!e.detail || e.detail.table === 'activity_log') refresh();
+    };
+    window.addEventListener('mfm:data-changed', handler);
+    return () => window.removeEventListener('mfm:data-changed', handler);
+  }, []);
+
   // Pull all comment-type activity for this project (real + synthesized)
   const items = (window.ACTIVITY || [])
     .filter(a => a.project === project.id && (a.type === 'comment' || !a.type || a.type === 'note'))

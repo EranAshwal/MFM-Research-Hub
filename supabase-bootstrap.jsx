@@ -58,7 +58,7 @@
     );
 
     // Fetch in parallel
-    const [peopleRes, projectsRes, membersRes, pubsRes, milestonesRes, updatesRes, commentsRes, tasksRes] = await Promise.race([
+    const [peopleRes, projectsRes, membersRes, pubsRes, milestonesRes, updatesRes, commentsRes, tasksRes, activityRes] = await Promise.race([
       Promise.all([
         client.from('people').select('*').order('joined', { ascending: true }),
         client.from('projects').select('*').order('start_date', { ascending: true }),
@@ -68,6 +68,7 @@
         client.from('progress_updates').select('*').order('created_at', { ascending: false }),
         client.from('comments').select('*').order('created_at', { ascending: true }),
         client.from('tasks').select('*').order('created_at', { ascending: false }),
+        client.from('activity_log').select('*').order('created_at', { ascending: false }),
       ]),
       timeout,
     ]);
@@ -81,6 +82,7 @@
     if (updatesRes.error) console.warn('[Supabase] updates:', updatesRes.error.message);
     if (commentsRes.error) console.warn('[Supabase] comments:', commentsRes.error.message);
     if (tasksRes.error) console.warn('[Supabase] tasks:', tasksRes.error.message);
+    if (activityRes && activityRes.error) console.warn('[Supabase] activity_log:', activityRes.error.message);
 
     // Map Supabase rows (snake_case) → app format (camelCase)
     const people = peopleRes.data.map(p => ({
@@ -220,6 +222,20 @@
     const ms = Math.round(performance.now() - startTime);
     console.log(`[Supabase] Loaded ${people.length} people + ${projects.length} projects + ${publications.length} publications + ${window.UPDATES.length} updates in ${ms}ms`);
 
+    // ============== ACTIVITY LOG (incl. saved comments) ==============
+    if (activityRes && activityRes.data) {
+      const mapped = activityRes.data.map(a => ({
+        id: a.id,
+        project: a.project_id,
+        user: a.user_id,
+        type: a.action_type || 'event',
+        text: a.text || a.action_type || '',
+        detail: a.detail || '',
+        date: a.created_at,
+      }));
+      window.ACTIVITY = mapped;
+    }
+
     // ============== REALTIME SUBSCRIPTIONS ==============
     // When any progress_update or comment changes, refresh from DB and re-render the app.
     const channel = client.channel('mfm-live')
@@ -232,6 +248,20 @@
         console.log('[Realtime] comments changed');
         await window.DataService.refresh();
         window.dispatchEvent(new CustomEvent('mfm:data-changed', { detail: { table: 'comments' } }));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_log' }, async () => {
+        // Refetch activity_log and update the in-memory array
+        try {
+          const { data } = await client.from('activity_log').select('*').order('created_at', { ascending: false });
+          if (data) {
+            window.ACTIVITY = data.map(a => ({
+              id: a.id, project: a.project_id, user: a.user_id,
+              type: a.action_type || 'event', text: a.text || a.action_type || '',
+              detail: a.detail || '', date: a.created_at,
+            }));
+            window.dispatchEvent(new CustomEvent('mfm:data-changed', { detail: { table: 'activity_log' } }));
+          }
+        } catch (e) { console.warn('[Realtime] activity_log refetch failed', e); }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, async () => {
         console.log('[Realtime] tasks changed');
