@@ -36,12 +36,41 @@ const NewProjectModal = ({ onClose, toast, navigate, currentUser }) => {
     lastUpdate: today,
   });
   const [saving, setSaving] = useState(false);
-  const set = (k, v) => setP(s => ({ ...s, [k]: v }));
+  const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState('');
+  const set = (k, v) => {
+    setP(s => ({ ...s, [k]: v }));
+    // Clear the field's error as soon as the user edits it
+    if (errors[k]) setErrors(e => { const n = { ...e }; delete n[k]; return n; });
+  };
+
+  const validate = () => {
+    const errs = {};
+    if (!p.title.trim()) errs.title = 'Title is required';
+    if (!p.acronym.trim()) errs.acronym = 'Acronym is required';
+    if (!p.pi) errs.pi = 'PI is required';
+    if (!p.lead) errs.lead = 'Project lead is required';
+    if (!p.bin) errs.bin = 'Theme is required';
+    if (!p.start) errs.start = 'Start date is required';
+    if (!p.target) errs.target = 'Target completion date is required';
+    if (p.target && p.start && p.target < p.start) errs.target = 'Target must be after start date';
+    return errs;
+  };
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!p.title.trim()) { toast?.('Title is required'); return; }
-    if (!p.acronym.trim()) { toast?.('Acronym is required'); return; }
+    const errs = validate();
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      setSubmitError('Please fix the highlighted fields below.');
+      // Scroll to first error inside the modal body
+      setTimeout(() => {
+        const firstErr = document.querySelector('.np-field-error');
+        firstErr?.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }, 50);
+      return;
+    }
+    setSubmitError('');
     setSaving(true);
     try {
       const created = await window.DataService.createProject(p);
@@ -52,7 +81,7 @@ const NewProjectModal = ({ onClose, toast, navigate, currentUser }) => {
       else navigate?.({ page: 'projects' });
     } catch (err) {
       console.error(err);
-      toast?.('Could not create project: ' + (err.message || 'unknown error'));
+      setSubmitError(err.message || 'Could not create project — please try again.');
     } finally {
       setSaving(false);
     }
@@ -71,18 +100,40 @@ const NewProjectModal = ({ onClose, toast, navigate, currentUser }) => {
           <button type="button" className="btn-icon btn-ghost" onClick={onClose}><Icon name="close" size={16} /></button>
         </div>
         <div className="modal-b" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <NPField label="Title">
+          {submitError && (
+            <div role="alert" style={{
+              padding: '10px 12px',
+              background: 'rgba(180, 30, 30, 0.06)',
+              border: '1px solid rgba(180, 30, 30, 0.25)',
+              borderRadius: 8,
+              color: 'var(--status-red, #b41e1e)',
+              fontSize: 13,
+              fontWeight: 500,
+              display: 'flex',
+              gap: 8,
+              alignItems: 'flex-start',
+            }}>
+              <Icon name="alert" size={16} />
+              <span>{submitError}</span>
+            </div>
+          )}
+          <NPField label="Title" required error={errors.title}>
             <input autoFocus value={p.title} onChange={e => set('title', e.target.value)}
                    placeholder="e.g. Postpartum Hemorrhage Risk Stratification"
+                   className={errors.title ? 'np-input-err' : ''}
                    style={{ width: '100%' }} />
           </NPField>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <NPField label="Acronym">
+            <NPField label="Acronym" required error={errors.acronym}>
               <input value={p.acronym} onChange={e => set('acronym', e.target.value.toUpperCase())}
-                     placeholder="e.g. PPH-RISK" style={{ width: '100%' }} />
+                     placeholder="e.g. PPH-RISK"
+                     className={errors.acronym ? 'np-input-err' : ''}
+                     style={{ width: '100%' }} />
             </NPField>
-            <NPField label="Theme / cluster">
-              <select value={p.bin} onChange={e => set('bin', e.target.value)} style={{ width: '100%' }}>
+            <NPField label="Theme / cluster" required error={errors.bin}>
+              <select value={p.bin} onChange={e => set('bin', e.target.value)}
+                      className={errors.bin ? 'np-input-err' : ''}
+                      style={{ width: '100%' }}>
                 {['Labour & Delivery', 'Preterm Labour', 'Ultrasound', 'Prenatal Diagnosis', 'Diabetes', 'Placenta-Mediated', 'Hypertension', 'Other'].map(b => <option key={b}>{b}</option>)}
               </select>
             </NPField>
@@ -110,25 +161,33 @@ const NewProjectModal = ({ onClose, toast, navigate, currentUser }) => {
             </NPField>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <NPField label="PI">
-              <select value={p.pi} onChange={e => set('pi', e.target.value)} style={{ width: '100%' }}>
+            <NPField label="PI" required error={errors.pi}>
+              <select value={p.pi} onChange={e => set('pi', e.target.value)}
+                      className={errors.pi ? 'np-input-err' : ''}
+                      style={{ width: '100%' }}>
                 <option value="">— Select PI —</option>
                 {people.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}
               </select>
             </NPField>
-            <NPField label="Project lead">
-              <select value={p.lead} onChange={e => set('lead', e.target.value)} style={{ width: '100%' }}>
+            <NPField label="Project lead" required error={errors.lead}>
+              <select value={p.lead} onChange={e => set('lead', e.target.value)}
+                      className={errors.lead ? 'np-input-err' : ''}
+                      style={{ width: '100%' }}>
                 <option value="">— Select lead —</option>
                 {people.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}
               </select>
             </NPField>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-            <NPField label="Start">
-              <input type="date" value={p.start} onChange={e => set('start', e.target.value)} style={{ width: '100%' }} />
+            <NPField label="Start" required error={errors.start}>
+              <input type="date" value={p.start} onChange={e => set('start', e.target.value)}
+                     className={errors.start ? 'np-input-err' : ''}
+                     style={{ width: '100%' }} />
             </NPField>
-            <NPField label="Target completion">
-              <input type="date" value={p.target} onChange={e => set('target', e.target.value)} style={{ width: '100%' }} />
+            <NPField label="Target completion" required error={errors.target}>
+              <input type="date" value={p.target} onChange={e => set('target', e.target.value)}
+                     className={errors.target ? 'np-input-err' : ''}
+                     style={{ width: '100%' }} />
             </NPField>
             <NPField label="REB status">
               <select value={p.reb} onChange={e => set('reb', e.target.value)} style={{ width: '100%' }}>
@@ -146,7 +205,7 @@ const NewProjectModal = ({ onClose, toast, navigate, currentUser }) => {
         </div>
         <div className="modal-f">
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={saving || !p.title.trim() || !p.acronym.trim()}>
+          <button type="submit" className="btn btn-primary" disabled={saving}>
             <Icon name="plus" size={14} stroke={2} /> {saving ? 'Creating…' : 'Create project'}
           </button>
         </div>
@@ -155,10 +214,17 @@ const NewProjectModal = ({ onClose, toast, navigate, currentUser }) => {
   );
 };
 
-const NPField = ({ label, children }) => (
+const NPField = ({ label, required, error, children }) => (
   <div>
-    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>{label}</div>
+    <div style={{ fontSize: 11, fontWeight: 600, color: error ? 'var(--status-red, #b41e1e)' : 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+      {label}{required && <span style={{ color: 'var(--status-red, #b41e1e)', marginLeft: 4 }}>*</span>}
+    </div>
     {children}
+    {error && (
+      <div className="np-field-error" style={{ fontSize: 11, color: 'var(--status-red, #b41e1e)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+        <Icon name="alert" size={11} /> {error}
+      </div>
+    )}
   </div>
 );
 

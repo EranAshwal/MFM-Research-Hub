@@ -718,6 +718,12 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; color: var(--ink); }
   .page { padding: 24px 24px 80px; }
 }
 
+/* New project form — error state for invalid fields */
+.np-input-err {
+  border-color: var(--status-red, #b41e1e) !important;
+  box-shadow: 0 0 0 3px rgba(180, 30, 30, 0.12) !important;
+}
+
 @media (max-width: 900px) {
   :root { --sidebar-w: 240px; }
 
