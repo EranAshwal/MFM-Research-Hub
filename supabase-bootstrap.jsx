@@ -50,16 +50,26 @@
   try {
     console.log('[Supabase] Fetching data…');
 
+    // Hard timeout — if Supabase doesn't respond within 8 seconds, mount the
+    // app anyway with empty data so the page never goes blank waiting on the DB.
+    const TIMEOUT_MS = 8000;
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Supabase fetch timed out after ' + TIMEOUT_MS + 'ms — DB may be paused or unreachable')), TIMEOUT_MS)
+    );
+
     // Fetch in parallel
-    const [peopleRes, projectsRes, membersRes, pubsRes, milestonesRes, updatesRes, commentsRes, tasksRes] = await Promise.all([
-      client.from('people').select('*').order('joined', { ascending: true }),
-      client.from('projects').select('*').order('start_date', { ascending: true }),
-      client.from('project_members').select('*'),
-      client.from('publications').select('*').order('year', { ascending: false }),
-      client.from('milestones').select('*').order('due_date', { ascending: true }),
-      client.from('progress_updates').select('*').order('created_at', { ascending: false }),
-      client.from('comments').select('*').order('created_at', { ascending: true }),
-      client.from('tasks').select('*').order('created_at', { ascending: false }),
+    const [peopleRes, projectsRes, membersRes, pubsRes, milestonesRes, updatesRes, commentsRes, tasksRes] = await Promise.race([
+      Promise.all([
+        client.from('people').select('*').order('joined', { ascending: true }),
+        client.from('projects').select('*').order('start_date', { ascending: true }),
+        client.from('project_members').select('*'),
+        client.from('publications').select('*').order('year', { ascending: false }),
+        client.from('milestones').select('*').order('due_date', { ascending: true }),
+        client.from('progress_updates').select('*').order('created_at', { ascending: false }),
+        client.from('comments').select('*').order('created_at', { ascending: true }),
+        client.from('tasks').select('*').order('created_at', { ascending: false }),
+      ]),
+      timeout,
     ]);
 
     if (peopleRes.error) throw new Error('people: ' + peopleRes.error.message);
@@ -267,6 +277,9 @@
     window.mountApp?.();
   } catch (err) {
     console.error('[Supabase] Load failed:', err);
+    // Mount the app anyway with whatever data is in memory (the static fallback
+    // bundled in data.jsx). Better an app with sample data than a blank page.
     showError(err.message || String(err));
+    window.mountApp?.();
   }
 })();
