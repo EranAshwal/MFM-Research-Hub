@@ -28,7 +28,7 @@ const NewProjectModal = ({ onClose, toast, navigate, currentUser }) => {
     target: inSixMonths,
     nextMilestone: 'Define scope and write protocol outline',
     nextDue: inSixMonths,
-    bin: '',
+    bin: 'Labour & Delivery',
     coverColor: 'maroon',
     awaitingUpdate: false,
     awaitingReview: false,
@@ -81,12 +81,17 @@ const NewProjectModal = ({ onClose, toast, navigate, currentUser }) => {
               <input value={p.acronym} onChange={e => set('acronym', e.target.value.toUpperCase())}
                      placeholder="e.g. PPH-RISK" style={{ width: '100%' }} />
             </NPField>
-            <NPField label="Category">
-              <select value={p.category} onChange={e => set('category', e.target.value)} style={{ width: '100%' }}>
-                {['Clinical research', 'Translational', 'Education', 'Quality improvement', 'Health services', 'Other'].map(c => <option key={c}>{c}</option>)}
+            <NPField label="Theme / cluster">
+              <select value={p.bin} onChange={e => set('bin', e.target.value)} style={{ width: '100%' }}>
+                {['Labour & Delivery', 'Preterm Labour', 'Ultrasound', 'Prenatal Diagnosis', 'Diabetes', 'Placenta-Mediated', 'Hypertension', 'Other'].map(b => <option key={b}>{b}</option>)}
               </select>
             </NPField>
           </div>
+          <NPField label="Category">
+            <select value={p.category} onChange={e => set('category', e.target.value)} style={{ width: '100%' }}>
+              {['Clinical research', 'Translational', 'Education', 'Quality improvement', 'Health services', 'Other'].map(c => <option key={c}>{c}</option>)}
+            </select>
+          </NPField>
           <NPField label="Description">
             <textarea value={p.description} onChange={e => set('description', e.target.value)} rows={3}
                       placeholder="One or two sentences on the question, population, and outcome."
