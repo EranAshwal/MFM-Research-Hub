@@ -17,7 +17,7 @@ const NewProjectModal = ({ onClose, toast, navigate, currentUser }) => {
     description: '',
     category: 'Clinical research',
     studyDesign: 'TBD',
-    status: 'Idea / scoping',
+    status: 'Idea / Concept',
     health: 'green',
     priority: 'Medium',
     progress: 0,
@@ -156,7 +156,7 @@ const NewProjectModal = ({ onClose, toast, navigate, currentUser }) => {
             </NPField>
             <NPField label="Status">
               <select value={p.status} onChange={e => set('status', e.target.value)} style={{ width: '100%' }}>
-                {['Idea / scoping', 'Protocol development', 'REB submission', 'Data collection', 'Analysis', 'Manuscript drafting', 'Under review', 'Published', 'On hold'].map(s => <option key={s}>{s}</option>)}
+                {['Idea / Concept', 'Protocol development', 'Data collection', 'Data cleaning', 'Statistical analysis', 'Manuscript drafting', 'Internal review', 'Submitted to journal', 'Published', 'On hold'].map(s => <option key={s}>{s}</option>)}
               </select>
             </NPField>
           </div>
@@ -191,7 +191,7 @@ const NewProjectModal = ({ onClose, toast, navigate, currentUser }) => {
             </NPField>
             <NPField label="REB status">
               <select value={p.reb} onChange={e => set('reb', e.target.value)} style={{ width: '100%' }}>
-                {['Not yet submitted', 'In preparation', 'Submitted', 'Approved', 'Exempt', 'Not required'].map(s => <option key={s}>{s}</option>)}
+                {['Not yet submitted', 'Submitted', 'Approved', 'Exempt'].map(s => <option key={s}>{s}</option>)}
               </select>
             </NPField>
           </div>
