@@ -969,6 +969,140 @@ const TabReports = ({ project, openReport }) => {
   );
 };
 
+const TabDiscussion = ({ project, toast, currentUser }) => {
+  const [, force] = useState(0);
+  const refresh = () => force(n => n + 1);
+  const [text, setText] = useState('');
+  const [posting, setPosting] = useState(false);
+  const me = currentUser || window.AuthService?.getCurrentPerson();
+
+  // Pull all comment-type activity for this project (real + synthesized)
+  const items = (window.ACTIVITY || [])
+    .filter(a => a.project === project.id && (a.type === 'comment' || !a.type || a.type === 'note'))
+    .slice()
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const post = async (e) => {
+    e?.preventDefault();
+    if (!text.trim() || posting) return;
+    setPosting(true);
+    try {
+      await window.DataService.logActivity(project.id, me?.id, 'comment', 'commented', text.trim());
+      // Optimistically append so the user sees it immediately
+      (window.ACTIVITY || []).push({
+        id: 'a-' + Date.now(),
+        project: project.id,
+        user: me?.id,
+        type: 'comment',
+        text: 'commented',
+        detail: text.trim(),
+        date: new Date().toISOString(),
+      });
+      setText('');
+      refresh();
+      toast?.('Comment posted');
+    } catch (err) {
+      toast?.('Failed to post: ' + (err.message || 'unknown error'), 'error');
+    }
+    setPosting(false);
+  };
+
+  const fmt = (date) => {
+    const d = new Date(date);
+    const today = new Date();
+    const isToday = d.toDateString() === today.toDateString();
+    const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+    const isYesterday = d.toDateString() === yesterday.toDateString();
+    if (isToday) return 'Today at ' + d.toLocaleTimeString('en', { hour: 'numeric', minute: '2-digit' });
+    if (isYesterday) return 'Yesterday at ' + d.toLocaleTimeString('en', { hour: 'numeric', minute: '2-digit' });
+    return d.toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' }) +
+           ' at ' + d.toLocaleTimeString('en', { hour: 'numeric', minute: '2-digit' });
+  };
+
+  // Group by day for nice "DATE" separators
+  const groups = {};
+  items.forEach(it => {
+    const key = new Date(it.date).toDateString();
+    (groups[key] = groups[key] || []).push(it);
+  });
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 16, maxWidth: 820, margin: '0 auto' }}>
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--hairline)', background: 'var(--bg-elevated)' }}>
+          <div className="serif" style={{ fontSize: 16, fontWeight: 600 }}>Discussion</div>
+          <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+            {items.length === 0 ? 'No comments yet — start the conversation below.' : `${items.length} comment${items.length === 1 ? '' : 's'} on ${project.acronym}`}
+          </div>
+        </div>
+
+        <div style={{ padding: '14px 20px', maxHeight: 520, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {items.length === 0 && (
+            <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--muted)' }}>
+              <div style={{ width: 48, height: 48, margin: '0 auto 12px', borderRadius: '50%', background: 'var(--bg-elevated)', display: 'grid', placeItems: 'center' }}>
+                <Icon name="message" size={20} />
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>No comments yet</div>
+              <div style={{ fontSize: 12, marginTop: 4 }}>Be the first to leave a note for the team.</div>
+            </div>
+          )}
+          {Object.entries(groups).map(([dayKey, dayItems]) => {
+            const d = new Date(dayKey);
+            const today = new Date();
+            const label = d.toDateString() === today.toDateString() ? 'Today'
+                        : d.toLocaleDateString('en', { weekday: 'long', month: 'short', day: 'numeric' });
+            return (
+              <div key={dayKey} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ textAlign: 'center', position: 'relative' }}>
+                  <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, background: 'var(--hairline)', zIndex: 0 }} />
+                  <span style={{ position: 'relative', background: 'var(--paper)', padding: '0 12px', fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</span>
+                </div>
+                {dayItems.map(it => {
+                  const author = personById(it.user) || { name: 'Unknown', initials: '?' };
+                  const isMe = me && it.user === me.id;
+                  return (
+                    <div key={it.id} style={{ display: 'grid', gridTemplateColumns: '32px 1fr', gap: 10, alignItems: 'flex-start' }}>
+                      <Avatar user={author} size="sm" />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{author.name}{isMe ? ' (you)' : ''}</span>
+                          <span style={{ fontSize: 11, color: 'var(--muted)' }}>{fmt(it.date)}</span>
+                        </div>
+                        <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                          {it.detail || it.text}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+
+        <form onSubmit={post} style={{ padding: '14px 20px', borderTop: '1px solid var(--hairline)', background: 'var(--bg-elevated)', display: 'grid', gridTemplateColumns: '32px 1fr auto', gap: 10, alignItems: 'flex-start' }}>
+          <Avatar user={me || { name: 'Y', initials: 'Y' }} size="sm" />
+          <textarea
+            value={text}
+            onChange={e => setText(e.target.value)}
+            placeholder={`Write a comment for ${project.acronym}…`}
+            rows={2}
+            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) post(e); }}
+            style={{ width: '100%', resize: 'vertical', minHeight: 48, fontSize: 13, fontFamily: 'inherit' }}
+          />
+          <button type="submit" className="btn btn-primary" disabled={!text.trim() || posting}
+                  style={{ alignSelf: 'flex-end' }}>
+            <Icon name="send" size={14} stroke={2} /> {posting ? 'Posting…' : 'Post'}
+          </button>
+        </form>
+        <div style={{ padding: '0 20px 12px', fontSize: 10, color: 'var(--muted)', textAlign: 'right' }}>
+          Tip: <kbd style={{ padding: '1px 4px', background: 'var(--paper)', border: '1px solid var(--hairline)', borderRadius: 3, fontSize: 10 }}>⌘/Ctrl + Enter</kbd> to post
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const TabActivity = ({ project, navigate }) => {
   const items = ACTIVITY.filter(a => a.project === project.id);
   // Plus some synthesized history
@@ -995,6 +1129,7 @@ const ProjectDetail = ({ project, route, navigate, toast, updates, addUpdate, op
     { id: 'timeline', label: 'Timeline', icon: 'timeline' },
     { id: 'tasks', label: 'Tasks', icon: 'tasks' },
     { id: 'updates', label: 'Progress updates', icon: 'updates' },
+    { id: 'discussion', label: 'Discussion', icon: 'message' },
     { id: 'files', label: 'Files', icon: 'files', badge: project.fileCount },
     { id: 'reports', label: 'Reports', icon: 'reports' },
     { id: 'activity', label: 'Activity', icon: 'activity' },
@@ -1052,6 +1187,7 @@ const ProjectDetail = ({ project, route, navigate, toast, updates, addUpdate, op
       {tab === 'timeline' && <TabTimeline project={project} toast={toast} />}
       {tab === 'tasks' && <TabTasks project={project} toast={toast} />}
       {tab === 'updates' && <TabUpdates project={project} toast={toast} updates={updates} addUpdate={addUpdate} currentUser={window.AuthService?.getCurrentPerson()} />}
+      {tab === 'discussion' && <TabDiscussion project={project} toast={toast} currentUser={window.AuthService?.getCurrentPerson()} />}
       {tab === 'files' && <TabFiles project={project} toast={toast} />}
       {tab === 'reports' && <TabReports project={project} openReport={openReport} />}
       {tab === 'activity' && <TabActivity project={project} navigate={navigate} />}
