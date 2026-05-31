@@ -789,6 +789,7 @@ const LoginModal = ({ open, onClose, onSignIn }) => {
   const [authBusy, setAuthBusy] = useState(false);
   const [signupMode, setSignupMode] = useState(false);
   const [signupNote, setSignupNote] = useState('');
+  const [showPwd, setShowPwd] = useState(false);
   if (!open) return null;
 
   const accounts = [
@@ -862,7 +863,15 @@ const LoginModal = ({ open, onClose, onSignIn }) => {
                             }}>Forgot?</button>
                   )}
                 </div>
-                <input value={pwd} onChange={e => setPwd(e.target.value)} type="password" placeholder="••••••••" style={{ width: '100%' }} />
+                <div style={{ position: 'relative' }}>
+                  <input value={pwd} onChange={e => setPwd(e.target.value)} type={showPwd ? 'text' : 'password'} placeholder="••••••••" style={{ width: '100%', paddingRight: 40 }} />
+                  <button type="button" className="btn-icon btn-ghost" aria-label={showPwd ? 'Hide password' : 'Show password'}
+                          title={showPwd ? 'Hide password' : 'Show password'}
+                          onClick={() => setShowPwd(s => !s)}
+                          style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }}>
+                    <Icon name={showPwd ? 'eye-off' : 'eye'} size={16} />
+                  </button>
+                </div>
               </div>
               <button className="btn btn-primary" style={{ justifyContent: 'center', marginTop: 6 }}
                       disabled={authBusy || !email || !pwd || !window.AuthService}
