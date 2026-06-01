@@ -63,6 +63,17 @@ function App() {
     return off;
   }, []);
 
+  // Re-render the whole app whenever the live data layer refreshes — initial
+  // load, realtime broadcasts, or the background poll. Without this, the
+  // dashboard/projects/inbox keep showing stale counts (e.g. 0 projects) until
+  // the user happens to interact and trigger a render. The project-detail tabs
+  // already listen for this event; the top-level shell now does too.
+  useEffect(() => {
+    const onData = () => force(n => n + 1);
+    window.addEventListener('mfm:data-changed', onData);
+    return () => window.removeEventListener('mfm:data-changed', onData);
+  }, []);
+
   // Navigate
   const navigate = (next) => {
     if (next.page !== 'landing' && !currentUser && next.page !== 'login') {

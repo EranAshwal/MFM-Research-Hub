@@ -25,9 +25,9 @@ const refreshAll = async () => {
       focus: p.focus, bio: p.bio, hasPhoto: p.has_photo, hasCV: p.has_cv, pubmedAuthor: p.pubmed_author,
       authUserId: p.auth_user_id, isAdmin: p.is_admin, isApproved: p.is_approved,
     }));
-    window.PEOPLE.length = 0; people.forEach(p => window.PEOPLE.push(p));
+    if (people.length) { window.PEOPLE.length = 0; people.forEach(p => window.PEOPLE.push(p)); }
   }
-  if (projectsRes.data && membersRes.data) {
+  if (projectsRes.data && membersRes.data && projectsRes.data.length) {
     const membersByProject = {};
     membersRes.data.forEach(m => {
       if (!membersByProject[m.project_id]) membersByProject[m.project_id] = [];

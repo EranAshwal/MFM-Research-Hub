@@ -303,8 +303,22 @@
       console.log('[Supabase] Auth initialized', window.AuthService.getSession() ? '(signed in)' : '(no session)');
     }
 
+    // The very first fetch above can run before the auth JWT is attached to the
+    // client, so RLS-protected tables (projects, updates, …) may come back empty
+    // on a cold load. Now that the session is established, re-pull once so the
+    // FIRST paint shows real data instead of zeros.
+    try {
+      if (window.AuthService?.getSession?.() && window.DataService?.refresh) {
+        await window.DataService.refresh();
+      }
+    } catch (e) {
+      console.warn('[Supabase] post-auth refresh failed (non-fatal):', e);
+    }
+
     // Now mount the app
     window.mountApp?.();
+    // Nudge any already-mounted listeners to read the freshly-loaded arrays.
+    window.dispatchEvent(new CustomEvent('mfm:data-changed', { detail: { table: 'init' } }));
   } catch (err) {
     console.error('[Supabase] Load failed:', err);
     // Mount the app anyway with whatever data is in memory (the static fallback
