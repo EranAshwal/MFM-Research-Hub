@@ -22,6 +22,19 @@ function App() {
   const [showNotif, setShowNotif] = useState(false);
   const [showNotify, setShowNotify] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  // ⌘K / Ctrl+K opens quick project search from anywhere
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setShowSearch(s => !s);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   // Global helper so any deeply-nested button can open the new-project modal
   useEffect(() => {
     window.__openNewProject = () => setShowNewProject(true);
@@ -234,6 +247,8 @@ function App() {
                 navigate={navigate} route={route}
                 openMobile={() => setMobileOpen(true)}
                 onSendNotification={() => setShowNotify(true)}
+                onShare={() => setShowShare(true)}
+                onOpenSearch={() => setShowSearch(true)}
                 onNewProject={() => setShowNewProject(true)} />
         {pageEl}
       </div>
@@ -241,6 +256,8 @@ function App() {
       <NotificationDrawer open={showNotif} onClose={() => setShowNotif(false)} notifications={notifs}
                           navigate={navigate} markRead={() => { setNotifs(notifs.map(n => ({ ...n, unread: false }))); }} />
       <SendNotificationModal open={showNotify} onClose={() => setShowNotify(false)} onSend={sendNotification} currentUser={currentUser} />
+      <ShareModal open={showShare} onClose={() => setShowShare(false)} toast={toast} />
+      <ProjectSearchModal open={showSearch} onClose={() => setShowSearch(false)} navigate={navigate} currentUser={currentUser} />
       {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} toast={toast} navigate={navigate} currentUser={currentUser} />}
       <ReportModal open={!!report} onClose={() => setReport(null)} type={report?.type} project={report?.project} toast={toast} />
       {aiReply && <AIReplyModal open={true} update={aiReply.update} project={aiReply.project}

@@ -48,6 +48,20 @@
   };
 
   try {
+    // ---- Paint first, fetch second (fixes the blank-screen lag on open) ----
+    // Initialize auth up front — a single, fast session check — so the first
+    // paint already knows whether you're signed in. Then mount the app right
+    // away with whatever data is in memory. The heavy multi-table pull below
+    // now runs *after* the app is on screen; the UI refreshes itself via the
+    // 'mfm:data-changed' event the moment the real data lands. Previously the
+    // page stayed blank until all nine queries (or an 8s timeout) resolved —
+    // brutal on a phone connection.
+    if (window.AuthService) {
+      await window.AuthService.init();
+      console.log('[Supabase] Auth initialized', window.AuthService.getSession() ? '(signed in)' : '(no session)');
+    }
+    window.mountApp?.();
+
     console.log('[Supabase] Fetching data…');
 
     // Hard timeout — if Supabase doesn't respond within 8 seconds, mount the
@@ -297,27 +311,8 @@
       } catch (e) { /* silent */ }
     }, POLL_INTERVAL_MS);
 
-    // Initialize auth service (Phase 5)
-    if (window.AuthService) {
-      await window.AuthService.init();
-      console.log('[Supabase] Auth initialized', window.AuthService.getSession() ? '(signed in)' : '(no session)');
-    }
-
-    // The very first fetch above can run before the auth JWT is attached to the
-    // client, so RLS-protected tables (projects, updates, …) may come back empty
-    // on a cold load. Now that the session is established, re-pull once so the
-    // FIRST paint shows real data instead of zeros.
-    try {
-      if (window.AuthService?.getSession?.() && window.DataService?.refresh) {
-        await window.DataService.refresh();
-      }
-    } catch (e) {
-      console.warn('[Supabase] post-auth refresh failed (non-fatal):', e);
-    }
-
-    // Now mount the app
-    window.mountApp?.();
-    // Nudge any already-mounted listeners to read the freshly-loaded arrays.
+    // App is already on screen (mounted above, before this fetch). Now that the
+    // real data has landed, nudge every mounted listener to re-read the arrays.
     window.dispatchEvent(new CustomEvent('mfm:data-changed', { detail: { table: 'init' } }));
   } catch (err) {
     console.error('[Supabase] Load failed:', err);

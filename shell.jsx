@@ -101,7 +101,7 @@ const Sidebar = ({ route, navigate, collapsed, currentUser, awaitingReview, awai
   );
 };
 
-const Topbar = ({ collapsed, setCollapsed, search, setSearch, currentUser, setShowNotif, unreadCount, navigate, route, openMobile, onSendNotification, onNewProject }) => {
+const Topbar = ({ collapsed, setCollapsed, search, setSearch, currentUser, setShowNotif, unreadCount, navigate, route, openMobile, onSendNotification, onShare, onOpenSearch, onNewProject }) => {
   const crumbs = useMemo(() => {
     const map = { dashboard: 'Dashboard', inbox: 'Inbox', projects: 'Projects', tasks: 'My Tasks', updates: 'Trainee Updates',
                   reports: 'Reports', publications: 'Publications', deadlines: 'Deadlines', calendar: 'Calendar', files: 'Files', people: 'People', settings: 'Settings' };
@@ -120,14 +120,17 @@ const Topbar = ({ collapsed, setCollapsed, search, setSearch, currentUser, setSh
         <Icon name="chevronRight" size={12} stroke={2} />
         <span style={{ fontSize: 14, fontWeight: 600 }}>{crumbs}</span>
       </div>
-      <div className="search">
+      <button className="search search-trigger" onClick={onOpenSearch} title="Search projects (⌘K)">
         <span className="search-icon"><Icon name="search" size={15} /></span>
-        <input value={search} onChange={(e) => setSearch(e.target.value)}
-               placeholder="Search…" />
-      </div>
+        <span className="search-trigger-label">Search projects…</span>
+        <span className="search-trigger-kbd desktop-only">⌘K</span>
+      </button>
       <button className="btn btn-sm new-project-btn" onClick={onNewProject}>
         <Icon name="plus" size={14} stroke={2} />
         <span>New project</span>
+      </button>
+      <button className="btn-icon btn-ghost" onClick={onShare} title="Share the Hub">
+        <Icon name="share" size={18} />
       </button>
       <button className="btn-icon btn-ghost" onClick={onSendNotification} title="Notify trainees">
         <Icon name="updates" size={18} />
