@@ -219,7 +219,7 @@ function App() {
     // approve updates, manage members) are gated inside ProjectDetail.
     else pageEl = <ProjectDetail project={project} route={route} navigate={navigate} toast={toast} updates={updates} addUpdate={addUpdate} openReport={openReport} />;
   }
-  else if (route.page === 'projects') pageEl = <ProjectsRegistry navigate={navigate} search={search} tweaks={t} currentUser={currentUser} />;
+  else if (route.page === 'projects') pageEl = <ProjectsRegistry navigate={navigate} search={search} setSearch={setSearch} tweaks={t} currentUser={currentUser} />;
   else if (route.page === 'inbox') pageEl = <InboxPage navigate={navigate} updates={updates} toast={toast} openReply={(update, project) => setAiReply({ update, project })} currentUser={currentUser} />;
   else if (route.page === 'deadlines') pageEl = <DeadlinesPage navigate={navigate} toast={toast} />;
   else if (route.page === 'tasks') pageEl = <MyTasksPage navigate={navigate} currentUser={currentUser} toast={toast} />;
@@ -257,7 +257,9 @@ function App() {
                           navigate={navigate} markRead={() => { setNotifs(notifs.map(n => ({ ...n, unread: false }))); }} />
       <SendNotificationModal open={showNotify} onClose={() => setShowNotify(false)} onSend={sendNotification} currentUser={currentUser} />
       <ShareModal open={showShare} onClose={() => setShowShare(false)} toast={toast} />
-      <ProjectSearchModal open={showSearch} onClose={() => setShowSearch(false)} navigate={navigate} currentUser={currentUser} />
+      <ProjectSearchModal open={showSearch} onClose={() => setShowSearch(false)} navigate={navigate}
+                          onSeeAll={(query) => { setSearch(query); navigate({ page: 'projects' }); }}
+                          currentUser={currentUser} />
       {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} toast={toast} navigate={navigate} currentUser={currentUser} />}
       <ReportModal open={!!report} onClose={() => setReport(null)} type={report?.type} project={report?.project} toast={toast} />
       {aiReply && <AIReplyModal open={true} update={aiReply.update} project={aiReply.project}

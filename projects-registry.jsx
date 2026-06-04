@@ -17,7 +17,7 @@ const Select = ({ value, onChange, options, label, allLabel = 'All' }) => (
   </div>
 );
 
-const ProjectsRegistry = ({ navigate, search, tweaks, currentUser }) => {
+const ProjectsRegistry = ({ navigate, search, setSearch, tweaks, currentUser }) => {
   const isAdmin = !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
   // Trainees and other non-admins only see projects they're a member of (or PI/lead on)
   const visibleProjects = isAdmin ? PROJECTS : PROJECTS.filter(p =>
@@ -61,9 +61,9 @@ const ProjectsRegistry = ({ navigate, search, tweaks, currentUser }) => {
   const rebOptions = [...new Set(visibleProjects.map(p => p.reb))];
 
   const clearAll = () => {
-    setStatusF(''); setHealthF(''); setLeadF(''); setCategoryF(''); setRebF(''); setAwaitF('');
+    setStatusF(''); setHealthF(''); setLeadF(''); setCategoryF(''); setRebF(''); setAwaitF(''); setSearch?.('');
   };
-  const hasFilters = statusF || healthF || leadF || categoryF || rebF || awaitF;
+  const hasFilters = statusF || healthF || leadF || categoryF || rebF || awaitF || search;
 
   return (
     <div className="page">
@@ -116,6 +116,7 @@ const ProjectsRegistry = ({ navigate, search, tweaks, currentUser }) => {
         </div>
         {hasFilters && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--hairline)' }}>
+            {search && <FilterChip label="Search" value={`“${search}”`} active onClear={() => setSearch?.('')} />}
             {statusF && <FilterChip label="Status" value={statusF} active onClear={() => setStatusF('')} />}
             {healthF && <FilterChip label="Health" value={healthLabel(healthF)} active onClear={() => setHealthF('')} />}
             {leadF && <FilterChip label="Lead" value={personById(leadF)?.name} active onClear={() => setLeadF('')} />}
