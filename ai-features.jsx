@@ -26,7 +26,7 @@ ${update.helpNeeded}
 
 Planned next:
 ${update.next}`;
-      const out = await window.claude.complete(prompt);
+      const out = await window.AIClient.complete(prompt);
       setSummary(out.trim());
       setState('ready');
     } catch (e) {
@@ -113,7 +113,7 @@ Their update:
 - Plan: ${update.next}
 
 Write only the reply text. No quotes around it.`;
-      const out = await window.claude.complete(prompt);
+      const out = await window.AIClient.complete(prompt);
       setDraft(out.trim());
     } catch (e) {
       setDraft('Could not generate a draft. ' + (e?.message || ''));
