@@ -27,8 +27,25 @@ const AvatarStack = ({ users, max = 3, size = 'sm' }) => {
 };
 
 const Sidebar = ({ route, navigate, collapsed, currentUser, awaitingReview, awaitingUpdate, mobileOpen, onCloseMobile, onSignOut }) => {
-  const inboxCount = PROJECTS.filter(p => p.awaitingReview).length + (window.UPDATES ? UPDATES.filter(u => u.piStatus === 'pending').length : 0);
   const isAdmin = !!currentUser?.isAdmin;
+  // Inbox badge = the current user's OWN unread notes (not a workspace-wide count).
+  const [inboxCount, setInboxCount] = useState(0);
+  useEffect(() => {
+    let live = true;
+    const load = async () => {
+      try {
+        const notes = await window.DataService?.listNotesFor?.(currentUser.id);
+        if (!live || !notes) return;
+        setInboxCount(notes.filter(n => n.recipient_id === currentUser.id && !n.read_at).length);
+      } catch (e) { /* badge is non-critical */ }
+    };
+    load();
+    // Refresh when the data layer broadcasts a change (e.g. a note was read).
+    const onData = () => load();
+    window.addEventListener('mfm:data-changed', onData);
+    window.addEventListener('mfm:notes-changed', onData);
+    return () => { live = false; window.removeEventListener('mfm:data-changed', onData); window.removeEventListener('mfm:notes-changed', onData); };
+  }, [currentUser?.id, route.page]);
   const items = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
     { id: 'inbox', label: 'Inbox', icon: 'message', badge: inboxCount },

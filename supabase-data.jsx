@@ -27,7 +27,9 @@ const refreshAll = async () => {
     }));
     if (people.length) { window.PEOPLE.length = 0; people.forEach(p => window.PEOPLE.push(p)); }
   }
-  if (projectsRes.data && membersRes.data && projectsRes.data.length) {
+  if (projectsRes.data && membersRes.data) {
+    // NOTE: no `.length` guard — a user scoped to zero projects must clear the
+    // array, not keep stale rows from a previous (broader) load.
     const membersByProject = {};
     membersRes.data.forEach(m => {
       if (!membersByProject[m.project_id]) membersByProject[m.project_id] = [];
@@ -42,6 +44,7 @@ const refreshAll = async () => {
       bin: p.bin, coverColor: p.cover_color, awaitingUpdate: p.awaiting_update,
       awaitingReview: p.awaiting_review, lastUpdate: p.last_update_date, nextMilestone: p.next_milestone,
       nextDue: p.next_due, fileCount: p.file_count,
+      approved: p.approved !== false, createdBy: p.created_by,
     }));
     window.PROJECTS.length = 0; projects.forEach(p => window.PROJECTS.push(p));
   }
@@ -124,7 +127,7 @@ const PROJECT_FIELD_MAP = {
   dataSource: 'data_source', targetJournal: 'target_journal', start: 'start_date', target: 'target_date',
   bin: 'bin', coverColor: 'cover_color', awaitingUpdate: 'awaiting_update',
   awaitingReview: 'awaiting_review', lastUpdate: 'last_update_date', nextMilestone: 'next_milestone',
-  nextDue: 'next_due', fileCount: 'file_count',
+  nextDue: 'next_due', fileCount: 'file_count', approved: 'approved', createdBy: 'created_by',
 };
 
 const PERSON_FIELD_MAP = {
@@ -157,10 +160,38 @@ window.DataService = {
   async createProject(patch) {
     const row = toRow(patch, PROJECT_FIELD_MAP);
     if (!row.title) throw new Error('Project title is required');
+    const me = window.AuthService?.getCurrentPerson?.();
+    const isAdmin = !!window.AuthService?.isAdmin?.();
+    // A non-admin must own what they create, or RLS (and the per-user scope)
+    // would hide the project from them the instant it's saved.
+    if (me?.id) {
+      if (!row.pi_id)   row.pi_id   = me.id;
+      if (!row.lead_id) row.lead_id = me.id;
+      row.created_by = me.id;
+    }
+    // Non-admin ideas await approval; the DB trigger enforces this too.
+    row.approved = isAdmin ? (row.approved !== false) : false;
     const { data, error } = await sb().from('projects').insert(row).select().single();
     if (error) throw error;
+    // Make the creator an explicit member so it shows under “their” projects
+    // even if PI/lead are later reassigned.
+    if (data?.id && me?.id) {
+      try {
+        await sb().from('project_members')
+          .upsert({ project_id: data.id, person_id: me.id, role_on_project: 'Lead' },
+                   { onConflict: 'project_id,person_id' });
+      } catch (e) { /* membership is best-effort; ownership via pi/lead still applies */ }
+    }
     await refreshAll();
     return data;
+  },
+
+  // Admin-only: approve a submitted project idea.
+  async approveProject(id) {
+    const { error } = await sb().from('projects')
+      .update({ approved: true, awaiting_review: false }).eq('id', id);
+    if (error) throw error;
+    await refreshAll();
   },
 
   async addProjectMember(projectId, personId, roleOnProject = 'Member') {

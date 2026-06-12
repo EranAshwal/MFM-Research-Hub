@@ -153,6 +153,8 @@
       nextMilestone: p.next_milestone,
       nextDue: p.next_due,
       fileCount: p.file_count,
+      approved: p.approved !== false,
+      createdBy: p.created_by,
     }));
 
     // Map publications (snake_case → camelCase, keep fields the existing page expects)

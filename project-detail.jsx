@@ -1170,6 +1170,16 @@ const ProjectDetail = ({ project, route, navigate, toast, updates, addUpdate, op
   const pi = personById(project.pi);
   const lead = personById(project.lead);
   const members = project.members.map(personById).filter(Boolean);
+  const isAdmin = !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
+  const [approving, setApproving] = useState(false);
+  const approve = async () => {
+    setApproving(true);
+    try {
+      await window.DataService.approveProject(project.id);
+      toast?.(`${project.acronym} approved`);
+    } catch (e) { toast?.('Approve failed: ' + e.message, 'error'); }
+    setApproving(false);
+  };
 
   return (
     <div className="page">
@@ -1186,6 +1196,12 @@ const ProjectDetail = ({ project, route, navigate, toast, updates, addUpdate, op
             <span className="mono" style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '0.05em', fontWeight: 500 }}>{project.acronym}</span>
             <HealthDot health={project.health} label />
             <span className="chip chip-grey">{project.category}</span>
+            {project.approved === false && (
+              <span className="chip" style={{ background: 'var(--status-amber, #b8860b)', color: '#fff', fontWeight: 600 }}
+                    title="Submitted as an idea — waiting for an admin to approve">
+                <Icon name="clock" size={11} /> Pending approval
+              </span>
+            )}
           </div>
           <h1 className="page-title" style={{ fontSize: 28, lineHeight: 1.15 }}>{project.title}</h1>
           <div style={{ display: 'flex', gap: 16, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1198,6 +1214,12 @@ const ProjectDetail = ({ project, route, navigate, toast, updates, addUpdate, op
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          {isAdmin && project.approved === false && (
+            <button className="btn btn-primary" onClick={approve} disabled={approving}
+                    style={{ background: 'var(--status-green, #1f8a5b)', borderColor: 'transparent' }}>
+              <Icon name="check" size={14} stroke={2.4} /> {approving ? 'Approving…' : 'Approve project'}
+            </button>
+          )}
           <button className="btn" onClick={() => setHeaderComment(true)}><Icon name="message" size={14} /> Comment</button>
           <button className="btn" onClick={() => setHeaderUpload(true)}><Icon name="upload" size={14} /> Upload</button>
           <button className="btn btn-primary" onClick={() => openReport('summary', project)}>

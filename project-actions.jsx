@@ -5,6 +5,7 @@
 // =========================================================================
 const NewProjectModal = ({ onClose, toast, navigate, currentUser }) => {
   const me = currentUser || (window.AuthService?.getCurrentPerson?.());
+  const isAdmin = !!(window.AuthService && window.AuthService.isAdmin && window.AuthService.isAdmin());
   const today = new Date().toISOString().slice(0, 10);
   const inSixMonths = (() => {
     const d = new Date();
@@ -75,7 +76,7 @@ const NewProjectModal = ({ onClose, toast, navigate, currentUser }) => {
     try {
       const created = await window.DataService.createProject(p);
       const newId = created?.id || p.id;
-      toast?.('Project created');
+      toast?.(isAdmin ? 'Project created' : 'Idea submitted — sent for admin approval');
       onClose();
       if (newId) navigate?.({ page: 'projects', id: newId });
       else navigate?.({ page: 'projects' });
@@ -94,8 +95,8 @@ const NewProjectModal = ({ onClose, toast, navigate, currentUser }) => {
       <form className="modal" style={{ maxWidth: 640 }} onClick={e => e.stopPropagation()} onSubmit={submit}>
         <div className="modal-h">
           <div>
-            <div className="serif" style={{ fontSize: 20, fontWeight: 600 }}>New project</div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>You can edit any of these details later.</div>
+            <div className="serif" style={{ fontSize: 20, fontWeight: 600 }}>{isAdmin ? 'New project' : 'New project idea'}</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{isAdmin ? 'You can edit any of these details later.' : 'Submit your idea — an admin reviews and approves it. You can edit details later.'}</div>
           </div>
           <button type="button" className="btn-icon btn-ghost" onClick={onClose}><Icon name="close" size={16} /></button>
         </div>
@@ -206,7 +207,7 @@ const NewProjectModal = ({ onClose, toast, navigate, currentUser }) => {
         <div className="modal-f">
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
           <button type="submit" className="btn btn-primary" disabled={saving}>
-            <Icon name="plus" size={14} stroke={2} /> {saving ? 'Creating…' : 'Create project'}
+            <Icon name="plus" size={14} stroke={2} /> {saving ? (isAdmin ? 'Creating…' : 'Submitting…') : (isAdmin ? 'Create project' : 'Submit idea')}
           </button>
         </div>
       </form>
