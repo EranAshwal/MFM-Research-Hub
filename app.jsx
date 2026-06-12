@@ -219,7 +219,7 @@ function App() {
     // approve updates, manage members) are gated inside ProjectDetail.
     else pageEl = <ProjectDetail project={project} route={route} navigate={navigate} toast={toast} updates={updates} addUpdate={addUpdate} openReport={openReport} />;
   }
-  else if (route.page === 'projects') pageEl = <ProjectsRegistry navigate={navigate} search={search} setSearch={setSearch} tweaks={t} currentUser={currentUser} />;
+  else if (route.page === 'projects') pageEl = <ProjectsRegistry navigate={navigate} search={search} setSearch={setSearch} tweaks={t} currentUser={currentUser} route={route} />;
   else if (route.page === 'inbox') pageEl = <InboxPage navigate={navigate} updates={updates} toast={toast} openReply={(update, project) => setAiReply({ update, project })} currentUser={currentUser} />;
   else if (route.page === 'deadlines') pageEl = <DeadlinesPage navigate={navigate} toast={toast} />;
   else if (route.page === 'tasks') pageEl = <MyTasksPage navigate={navigate} currentUser={currentUser} toast={toast} />;
